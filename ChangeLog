@@ -1,0 +1,16 @@
+在Alibaba-DataX 主干代码基础上的修改记录
+
+2020-05-27:
+1、修改Record接口，增加 setColumn(int index,Column column) 方法，实现了在特定位置插入新列，原列及后面的列自动相应后移。可用于dx_groovy中新增列。
+2、修改UnstructedStorageReaderUtil类：
+   * column 参数增加了按 “列名” 方式读取需要的列（有表头时），适用于列数量及列位置(顺序)不固定的文件。没有对应列名的字段返回null值。
+   * 支持一个Text文件包含两份二维表的情况，这类文件都有一个包含特定内容的行作为分隔标志(某一行的RawData的头部如果等于配置项fileSplitLine的内容即为匹配)。相关配置参数：fileSplitLine和beforeSplitLine，分隔行前后的两份二维表均支持
+     只读取需要的列。
+   * 增加了readFromExcel方法，使用Office POI库解析Excel2003、Excel2007文件。
+   * 因为是非结构化文件处理的公共类，以上特性被txtfilereader和ftpreader全部或部分继承。
+3、增加ExcelReader，可按sheet索引或sheet名称选择需要读取的sheet页，可自定义表头行位置（默认第一行），支持只读取需要的列（有表头时）。excelreader不支持压缩包。
+4、修改FtpReader，增加对Excel文件的支持；增加pathFilter配置，可对路径更精细化的正则表达式过滤，支持用密码文件配置用户名和密码，以方便多个job config共用及密码修改。
+5、TxtFileReader/ExcelReader/FtpReader 均增加了readFileAttrs 配置参数，允许读取文件名和文件行号作为最后两位补充字段(__filepath、__line)，用于数据血缘追踪场景。
+   注意：如果是压缩包时不能精确反映文件属性，__filepath是压缩包自身的路径，__line是各压缩文件块中的行号。
+6、修改HdfsWriter，文件类型为text时，支持"column": ["*"] 配置，简化原来需要指定所有字段的繁琐配置。需要严格控制字段的场景，不推荐使用["*"]方式。
+7、创建了groovy-udf项目，以方便dx_groovy代码的开发、封装及测试，简化groovy code后期维护成本。
