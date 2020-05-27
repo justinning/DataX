@@ -204,7 +204,7 @@ HdfsWriter提供向HDFS文件系统指定路径中写入TEXTFile文件和ORCFile
 	* 默认值：无 <br />
 * **column**
 
-	* 描述：写入数据的字段，不支持对部分列写入。为与hive中表关联，需要指定表中所有字段名和字段类型，其中：name指定字段名，type指定字段类型。 <br />
+	* 描述：写入数据的字段，不支持部分字段写入。<br />
 
 		用户可以指定Column字段信息，配置如下：
 
@@ -222,9 +222,16 @@ HdfsWriter提供向HDFS文件系统指定路径中写入TEXTFile文件和ORCFile
                  ]
 		```
 
+		当fileType为text时，可以用*代表所有字段（全部按字符串类型处理）配置如下：
+
+		```json
+		"column": ["*"]
+		```
+
 	* 必选：是 <br />
 
 	* 默认值：无 <br />
+
 * **writeMode**
 
  	* 描述：hdfswriter写入前数据清理处理模式： <br />

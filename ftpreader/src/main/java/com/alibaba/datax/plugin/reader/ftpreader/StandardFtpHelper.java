@@ -8,7 +8,6 @@ import java.util.HashSet;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
-import org.apache.commons.net.ftp.FTPClientConfig;
 import org.apache.commons.net.ftp.FTPFile;
 import org.apache.commons.net.ftp.FTPReply;
 import org.slf4j.Logger;
@@ -51,6 +50,12 @@ public class StandardFtpHelper extends FtpHelper {
 			}
 			//设置命令传输编码
 			String fileEncoding = System.getProperty("file.encoding");
+			
+			// 必须加上这句，否则即使fileEncoding=UTF-8，指定路径也无法访问
+			if(FTPReply.isPositiveCompletion(ftpClient.sendCommand("OPTS UTF8", "ON"))) {
+				// 开启服务器对UTF-8的支持，如果服务器支持就用UTF-8编码，否则就使用传入的编码.
+				fileEncoding = "UTF-8";
+			}
 			ftpClient.setControlEncoding(fileEncoding);
 		} catch (UnknownHostException e) {
 			String message = String.format("请确认ftp服务器地址是否正确，无法连接到地址为: [%s] 的ftp服务器", host);
@@ -77,8 +82,8 @@ public class StandardFtpHelper extends FtpHelper {
 				ftpClient.logout();
 			} catch (IOException e) {
 				String message = "与ftp服务器断开连接失败";
-				LOG.error(message);
-				throw DataXException.asDataXException(FtpReaderErrorCode.FAIL_DISCONNECT, message, e);
+				 LOG.error(message);
+				//throw DataXException.asDataXException(FtpReaderErrorCode.FAIL_DISCONNECT, message, e);
 			}finally {
 				if(ftpClient.isConnected()){
 					try {
@@ -86,7 +91,7 @@ public class StandardFtpHelper extends FtpHelper {
 					} catch (IOException e) {
 						String message = "与ftp服务器断开连接失败";
 						LOG.error(message);
-						throw DataXException.asDataXException(FtpReaderErrorCode.FAIL_DISCONNECT, message, e);
+						//throw DataXException.asDataXException(FtpReaderErrorCode.FAIL_DISCONNECT, message, e);
 					}
 				}
 

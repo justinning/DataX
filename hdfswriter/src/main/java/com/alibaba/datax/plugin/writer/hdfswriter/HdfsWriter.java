@@ -73,10 +73,16 @@ public class HdfsWriter extends Writer {
             if (null == columns || columns.size() == 0) {
                 throw DataXException.asDataXException(HdfsWriterErrorCode.REQUIRED_VALUE, "您需要指定 columns");
             }else{
-                for (Configuration eachColumnConf : columns) {
-                    eachColumnConf.getNecessaryValue(Key.NAME, HdfsWriterErrorCode.COLUMN_REQUIRED_VALUE);
-                    eachColumnConf.getNecessaryValue(Key.TYPE, HdfsWriterErrorCode.COLUMN_REQUIRED_VALUE);
-                }
+            	// handle ["*"] or ['*']
+            	String columnsInStr = columns.get(0).toString();
+            	if( ("\"*\"".equals(columnsInStr) || "'*'".equals(columnsInStr)) && fileType.equalsIgnoreCase("TEXT")) {
+            		this.writerSliceConfig.set(Key.COLUMN, null);
+            	}else {
+	                for (Configuration eachColumnConf : columns) {
+	                    eachColumnConf.getNecessaryValue(Key.NAME, HdfsWriterErrorCode.COLUMN_REQUIRED_VALUE);
+	                    eachColumnConf.getNecessaryValue(Key.TYPE, HdfsWriterErrorCode.COLUMN_REQUIRED_VALUE);
+	                }
+            	}
             }
             //writeMode check
             this.writeMode = this.writerSliceConfig.getNecessaryValue(Key.WRITE_MODE, HdfsWriterErrorCode.REQUIRED_VALUE);

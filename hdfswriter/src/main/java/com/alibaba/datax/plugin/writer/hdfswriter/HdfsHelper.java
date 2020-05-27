@@ -303,6 +303,13 @@ public  class HdfsHelper {
             RecordWriter writer = outFormat.getRecordWriter(fileSystem, conf, outputPath.toString(), Reporter.NULL);
             Record record = null;
             while ((record = lineReceiver.getFromReader()) != null) {
+            	// 下列代码支持 column ["*"] 配置
+                if (columns == null) {
+                    columns = new ArrayList<>();
+                    for (int i = 0; i < record.getColumnNumber(); i++) {
+                      columns.add(Configuration.from(String.format("{\"name\":\"index-%d\",\"type\":\"string\"}", new Object[] { Integer.valueOf(i) })));
+                    }
+                }
                 MutablePair<Text, Boolean> transportResult = transportOneRecord(record, fieldDelimiter, columns, taskPluginCollector);
                 if (!transportResult.getRight()) {
                     writer.write(NullWritable.get(),transportResult.getLeft());

@@ -1,18 +1,22 @@
 package com.alibaba.datax.plugin.unstructuredstorage.reader;
 
-import com.alibaba.datax.common.element.*;
-import com.alibaba.datax.common.exception.DataXException;
-import com.alibaba.datax.common.plugin.RecordSender;
-import com.alibaba.datax.common.plugin.TaskPluginCollector;
-import com.alibaba.datax.common.util.Configuration;
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
-import com.alibaba.fastjson.TypeReference;
-import com.csvreader.CsvReader;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringReader;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.UnsupportedCharsetException;
+import java.text.DateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+
+import org.anarres.lzo.LzoDecompressor1x_safe;
+import org.anarres.lzo.LzoInputStream;
 import org.apache.commons.beanutils.BeanUtils;
-import io.airlift.compress.snappy.SnappyCodec;
-import io.airlift.compress.snappy.SnappyFramedInputStream;
-import org.anarres.lzo.*;
 import org.apache.commons.compress.compressors.CompressorInputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
@@ -23,13 +27,24 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
-import java.nio.charset.UnsupportedCharsetException;
-import java.text.DateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
+import com.alibaba.datax.common.element.BoolColumn;
+import com.alibaba.datax.common.element.Column;
+import com.alibaba.datax.common.element.DateColumn;
+import com.alibaba.datax.common.element.DoubleColumn;
+import com.alibaba.datax.common.element.LongColumn;
+import com.alibaba.datax.common.element.Record;
+import com.alibaba.datax.common.element.StringColumn;
+import com.alibaba.datax.common.exception.DataXException;
+import com.alibaba.datax.common.plugin.RecordSender;
+import com.alibaba.datax.common.plugin.TaskPluginCollector;
+import com.alibaba.datax.common.util.Configuration;
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.TypeReference;
+import com.csvreader.CsvReader;
+
+import io.airlift.compress.snappy.SnappyCodec;
+import io.airlift.compress.snappy.SnappyFramedInputStream;
 
 public class UnstructuredStorageReaderUtil {
 	private static final Logger LOG = LoggerFactory
@@ -68,13 +83,15 @@ public class UnstructuredStorageReaderUtil {
 
 	public static String[] splitBufferedReader(CsvReader csvReader)
 			throws IOException {
+
 		String[] splitedResult = null;
+					
 		if (csvReader.readRecord()) {
 			splitedResult = csvReader.getValues();
 		}
 		return splitedResult;
 	}
-
+	
 	/**
 	 * 不支持转义
 	 *
@@ -211,6 +228,8 @@ public class UnstructuredStorageReaderUtil {
 											"文件压缩格式 , 不支持您配置的文件压缩格式: [%s]", compress));
 				}
 			}
+			
+			
 			UnstructuredStorageReaderUtil.doReadFromStream(reader, context,
 					readerSliceConfig, recordSender, taskPluginCollector);
 		} catch (UnsupportedEncodingException uee) {
@@ -262,33 +281,134 @@ public class UnstructuredStorageReaderUtil {
 				Constant.DEFAULT_SKIP_HEADER);
 		// warn: no default value '\N'
 		String nullFormat = readerSliceConfig.getString(Key.NULL_FORMAT);
-
+		
+		boolean fileAttrs = readerSliceConfig.getBool(Key.READ_FILE_ATTRS,false);
+		// Identify whether the first line is found.
+		
 		// warn: Configuration -> List<ColumnEntry> for performance
 		// List<Configuration> column = readerSliceConfig
 		// .getListConfiguration(Key.COLUMN);
-		List<ColumnEntry> column = UnstructuredStorageReaderUtil
-				.getListColumnEntry(readerSliceConfig, Key.COLUMN);
+		
+		List<ColumnEntry> column = UnstructuredStorageReaderUtil.getListColumnEntry(readerSliceConfig, Key.COLUMN);
+				
+		String[] usecols = null;
+		
+		//分析是否指定了表头。如果使用getListConfiguration，每个Item包含双层引号,getList返回的是JSONArray对象，单层引号
+		List<Object> cl = readerSliceConfig.getList(Key.COLUMN);
+		if (cl != null && cl.size() > 0) {
+			String columnsInStr = cl.get(0).toString();
+			if (!columnsInStr.matches(".*\\{.*\\}.*")) {
+				// 从配置中获得要读取的字段列表
+				usecols = new String[cl.size()];
+				for (int i = 0; i < cl.size(); i++)
+					usecols[i] = cl.get(i).toString();
+			}
+		}
+		
+		
+		String splitLine = readerSliceConfig.getString(Key.FILE_SPLIT_LINE,"");
+		boolean isBeforeSplitLine = readerSliceConfig.getBool(Key.BEFORE_SPLIT_LINE,true);
+		boolean bFindFirstLine = isBeforeSplitLine;
 		CsvReader csvReader  = null;
-
+		
 		// every line logic
 		try {
 			// TODO lineDelimiter
-			if (skipHeader) {
-				String fetchLine = reader.readLine();
-				LOG.info(String.format("Header line %s has been skiped.",
-						fetchLine));
-			}
+
 			csvReader = new CsvReader(reader);
 			csvReader.setDelimiter(fieldDelimiter);
-
+			
+			// Read the csvReaderConfig configuration in JSON. The previous code is not found to call it. Why?
+			validateCsvReaderConfig(readerSliceConfig);			
 			setCsvReaderConfig(csvReader);
-
-			String[] parseRows;
-			while ((parseRows = UnstructuredStorageReaderUtil
-					.splitBufferedReader(csvReader)) != null) {
-				UnstructuredStorageReaderUtil.transportOneRecord(recordSender,
-						column, parseRows, nullFormat, taskPluginCollector);
+			
+			
+			//补充2列文件属性：文件路径、文件行号
+			if(fileAttrs && column != null && column.size() > 0) {
+				for(int i = 2; i > 0; i--) {
+					ColumnEntry c = new ColumnEntry();
+					c.setType("string");
+					c.setIndex(column.size());
+					column.add(c);
+				}
 			}
+			
+			int fileLineNum = 0;
+			int recordRow = 0;
+			String[] parseRow = null;
+			
+			while (csvReader.readRecord()) {				
+				// 如果启用了comment，fileLineNum得到的行号可能不是文件的实际行号
+				fileLineNum++;
+
+				String rawData = csvReader.getRawRecord();			
+				// 如果找到分隔行，如果取分割行之前的数据，则终止循环，否则以该行的字段值为新的表头，且下次不再比较splitLine
+				if( !"".equals(splitLine) && (!bFindFirstLine || isBeforeSplitLine ) && rawData != null && rawData.startsWith(splitLine)){
+					if(!bFindFirstLine){
+						bFindFirstLine = true;
+					}else {
+						// 已到分割行，代表记录已结束
+						break;
+					}
+				}
+				
+				if(!bFindFirstLine)
+					continue;
+								
+				recordRow++;
+				
+				if( recordRow == 1 ) {
+					parseRow = csvReader.getValues();
+					// csvReader会重设indexByName，后续就可以调用get(name)得到字段值
+					csvReader.setHeaders(parseRow);
+					
+					if (skipHeader) {
+						LOG.info(String.format("Header line %s has been skiped.",rawData));
+						continue;
+					}
+				}
+				
+				if( usecols == null) {
+					parseRow = csvReader.getValues();	
+				}else {
+					parseRow = new String[usecols.length];
+					for(int i=0; i< usecols.length; i++) {
+						int index = csvReader.getIndex(usecols[i]);
+						if( index >= 0 ) {
+							parseRow[i] = csvReader.get(index);
+						}else {
+							parseRow[i] = null;
+						}
+					}
+				}
+				
+				String[] newRows;
+				
+				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
+				// Note: If it is a compressed file, the file line number of multiple records in the same file will be the same
+				if (fileAttrs) {
+					newRows = new String[ parseRow.length + 2];
+					System.arraycopy(parseRow, 0, newRows, 0, parseRow.length);
+					
+					if (recordRow == 1 && !skipHeader) {						
+						newRows[parseRow.length] = Constant.FIELD_NAME_FILEPATH;
+						newRows[parseRow.length + 1 ] = Constant.FIELD_NAME_LINE;
+						
+					}else {
+						newRows[parseRow.length] = context;  //filepath
+						newRows[parseRow.length + 1 ] = String.valueOf(fileLineNum);
+
+					}
+				}else {
+							
+					newRows = parseRow;
+				}
+				
+				UnstructuredStorageReaderUtil.transportOneRecord(recordSender,
+						column, newRows, nullFormat, taskPluginCollector);
+				
+			}
+				
 		} catch (UnsupportedEncodingException uee) {
 			throw DataXException
 					.asDataXException(
@@ -312,6 +432,98 @@ public class UnstructuredStorageReaderUtil {
 		}
 	}
 
+
+	public static void readFromExcel(InputStream inputStream, FileFormat format, Configuration readerSliceConfig,
+			String context, RecordSender recordSender, TaskPluginCollector taskPluginCollector) {
+
+		// warn: no default value '\N'
+		String nullFormat = readerSliceConfig.getString(Key.NULL_FORMAT);
+		
+		// column null,["*"]及["columnName",...] 三种情况均返回null，配置为JSON格式时返回非null
+		List<ColumnEntry> column = UnstructuredStorageReaderUtil.getListColumnEntry(readerSliceConfig,Key.COLUMN);
+		
+		boolean fileAttrs = readerSliceConfig.getBool(Key.READ_FILE_ATTRS, false);
+		boolean skipHeader = readerSliceConfig.getBool(Key.SKIP_HEADER, false);
+		
+		try {
+			String[] usecols = null;
+			
+			//分析是否指定了表头。如果使用getListConfiguration，每个Item包含双层引号,getList返回的是JSONArray对象，单层引号
+			List<Object> cl = readerSliceConfig.getList(Key.COLUMN);
+			if (cl != null && cl.size() > 0) {
+				String columnsInStr = cl.get(0).toString();
+				if (!columnsInStr.matches(".*\\{.*\\}.*")) {
+					// 从配置中获得要读取的字段列表
+					usecols = new String[cl.size()];
+					for (int i = 0; i < cl.size(); i++)
+						usecols[i] = cl.get(i).toString();
+				}
+			}
+			
+			//补充2列文件属性：文件路径、文件行号
+			if(fileAttrs && column != null && column.size() > 0) {
+				for(int i = 2; i > 0; i--) {
+					ColumnEntry c = new ColumnEntry();
+					c.setType("string");
+					c.setIndex(column.size());
+					column.add(c);
+				}
+			}
+
+			List<String[]> dataFrame = ExcelParserHelper.parse(inputStream,
+					format,
+					readerSliceConfig.getInt(Key.HEADERLINE,1),
+					usecols,
+					readerSliceConfig.getList(Key.SHEET_INDEXS),
+					readerSliceConfig.getString(Key.SHEET_NAMES,null),
+					readerSliceConfig.getBool(Key.SKIP_HEADER,true));
+			
+			int rowNum = 0;
+			
+			for (String[] parseRows : dataFrame) {
+				rowNum++;
+				
+				if( skipHeader && rowNum == 1)
+					continue;
+				
+				String[] newRows;
+				
+				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
+				// Note: If it is a compressed file, the file line number of multiple records in the same file will be the same
+				if (fileAttrs) {
+					newRows = new String[ parseRows.length + 2];
+					System.arraycopy(parseRows, 0, newRows, 0, parseRows.length);
+					
+					if (rowNum == 1 && !skipHeader) {
+						newRows[parseRows.length] = Constant.FIELD_NAME_FILEPATH;
+						newRows[parseRows.length + 1 ] = Constant.FIELD_NAME_LINE;
+						
+					}else {
+						newRows[parseRows.length] = context;  //filepath
+						newRows[parseRows.length + 1 ] = String.valueOf(rowNum);
+					}
+				}else {
+									
+					newRows = parseRows;
+				}
+				
+				// every line logic
+				UnstructuredStorageReaderUtil.transportOneRecord(recordSender, column, newRows, nullFormat,
+						taskPluginCollector);
+			}
+		} catch (FileNotFoundException fnfe) {
+			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.FILE_NOT_EXISTS,
+					String.format("无法找到文件 : [%s]", inputStream), fnfe);
+		} catch (IOException ioe) {
+			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.READ_FILE_IO_ERROR,
+					String.format("读取文件错误 : [%s]", inputStream), ioe);
+		} catch (Exception e) {
+			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.RUNTIME_EXCEPTION,
+					String.format("运行时异常 : %s", e.getMessage()), e);
+		}
+
+	}
+	
 	public static Record transportOneRecord(RecordSender recordSender,
 											Configuration configuration,
 											TaskPluginCollector taskPluginCollector,
@@ -350,7 +562,7 @@ public class UnstructuredStorageReaderUtil {
 		if (null == columnConfigs || columnConfigs.size() == 0) {
 			for (String columnValue : sourceLine) {
 				// not equalsIgnoreCase, it's all ok if nullFormat is null
-				if (columnValue.equals(nullFormat)) {
+				if (columnValue == null || columnValue.equals(nullFormat)) {
 					columnGenerated = new StringColumn(null);
 				} else {
 					columnGenerated = new StringColumn(columnValue);
@@ -491,20 +703,28 @@ public class UnstructuredStorageReaderUtil {
 		return record;
 	}
 
+
 	public static List<ColumnEntry> getListColumnEntry(
 			Configuration configuration, final String path) {
 		List<JSONObject> lists = configuration.getList(path, JSONObject.class);
 		if (lists == null) {
 			return null;
 		}
-		List<ColumnEntry> result = new ArrayList<ColumnEntry>();
-		for (final JSONObject object : lists) {
-			result.add(JSON.parseObject(object.toJSONString(),
-					ColumnEntry.class));
+		
+		try {
+			List<ColumnEntry> result = new ArrayList<ColumnEntry>();
+			for (final JSONObject object : lists) {
+				result.add(JSON.parseObject(object.toJSONString(),
+						ColumnEntry.class));
+			}
+			return result;
 		}
-		return result;
+		catch (Exception e) {
+			return null;
+		}
 	}
-
+	
+	
 	private enum Type {
 		STRING, LONG, BOOLEAN, DOUBLE, DATE, ;
 	}
@@ -525,6 +745,21 @@ public class UnstructuredStorageReaderUtil {
 
 		// column: 1. index type 2.value type 3.when type is Date, may have format
 		validateColumn(readerConfiguration);
+		
+		// fileSplitLine
+		String splitLine = readerConfiguration.getString(Key.FILE_SPLIT_LINE);			
+		if( "".equals(splitLine)) {
+			throw DataXException.asDataXException(
+					UnstructuredStorageReaderErrorCode.ILLEGAL_VALUE,String.format("文件分隔行(%s)不能配置为空",
+							Key.FILE_SPLIT_LINE));
+		}
+		Boolean beforeSplitLine = readerConfiguration.getBool(Key.BEFORE_SPLIT_LINE);
+		if ( beforeSplitLine != null && splitLine == null) {
+			throw DataXException.asDataXException(
+					UnstructuredStorageReaderErrorCode.ILLEGAL_VALUE,String.format("配置了%s，但未配置文件分隔行%s",
+							Key.BEFORE_SPLIT_LINE,
+							Key.FILE_SPLIT_LINE));
+		}
 
 	}
 
@@ -583,6 +818,7 @@ public class UnstructuredStorageReaderUtil {
 	}
 
 	public static void validateColumn(Configuration readerConfiguration) {
+		
 		// column: 1. index type 2.value type 3.when type is Date, may have
 		// format
 		List<Configuration> columns = readerConfiguration
@@ -591,15 +827,20 @@ public class UnstructuredStorageReaderUtil {
 			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.REQUIRED_VALUE, "您需要指定 columns");
 		}
 		// handle ["*"]
-		if (null != columns && 1 == columns.size()) {
+		boolean jsonFormat = false;
+		if (null != columns && columns.size() > 0 ) {
+			
 			String columnsInStr = columns.get(0).toString();
 			if ("\"*\"".equals(columnsInStr) || "'*'".equals(columnsInStr)) {
-				readerConfiguration.set(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.COLUMN, null);
-				columns = null;
+				readerConfiguration.set(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.COLUMN, null);				
+			}else if( columnsInStr.matches(".*\\{.*\\}.*")) {
+				jsonFormat = true;
+			}else {
+				//指定列名方式
 			}
 		}
 
-		if (null != columns && columns.size() != 0) {
+		if (jsonFormat && null != columns && columns.size() != 0) {
 			for (Configuration eachColumnConf : columns) {
 				eachColumnConf.getNecessaryValue(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.TYPE,
 						UnstructuredStorageReaderErrorCode.REQUIRED_VALUE);

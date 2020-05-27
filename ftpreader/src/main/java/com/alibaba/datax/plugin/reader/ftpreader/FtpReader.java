@@ -1,9 +1,13 @@
 package com.alibaba.datax.plugin.reader.ftpreader;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +16,7 @@ import com.alibaba.datax.common.exception.DataXException;
 import com.alibaba.datax.common.plugin.RecordSender;
 import com.alibaba.datax.common.spi.Reader;
 import com.alibaba.datax.common.util.Configuration;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.FileFormat;
 import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderUtil;
 
 public class FtpReader extends Reader {
@@ -66,8 +71,24 @@ public class FtpReader extends Reader {
 						String.format("仅支持 ftp和sftp 传输协议 , 不支持您配置的传输协议: [%s]", protocol));
 			}
 			this.host = this.originConfig.getNecessaryValue(Key.HOST, FtpReaderErrorCode.REQUIRED_VALUE);
-			this.username = this.originConfig.getNecessaryValue(Key.USERNAME, FtpReaderErrorCode.REQUIRED_VALUE);
-			this.password = this.originConfig.getNecessaryValue(Key.PASSWORD, FtpReaderErrorCode.REQUIRED_VALUE);
+			//优先从密码文件中读取用户名、密码
+			String passwordFile = this.originConfig.getString(Key.PASSWORD_FILE);
+			if( passwordFile != null && new File(passwordFile).exists()) {
+				Properties p = new Properties();
+				try {
+					p.load(new FileInputStream(passwordFile));
+					this.username = p.getProperty(Key.USERNAME);
+					this.password = p.getProperty(Key.PASSWORD);
+					
+				} catch (Exception e) {
+					System.out.println(e.getMessage());
+					throw DataXException.asDataXException(FtpReaderErrorCode.ILLEGAL_VALUE,
+							String.format("密码文件打开失败: [%s]", e.getMessage()));
+				}
+			}else {
+				this.username = this.originConfig.getNecessaryValue(Key.USERNAME, FtpReaderErrorCode.REQUIRED_VALUE);
+				this.password = this.originConfig.getNecessaryValue(Key.PASSWORD, FtpReaderErrorCode.REQUIRED_VALUE);
+			}
 			this.timeout = originConfig.getInt(Key.TIMEOUT, Constant.DEFAULT_TIMEOUT);
 			this.maxTraversalLevel = originConfig.getInt(Key.MAXTRAVERSALLEVEL, Constant.DEFAULT_MAX_TRAVERSAL_LEVEL);
 			
@@ -105,8 +126,18 @@ public class FtpReader extends Reader {
 		@Override
 		public void prepare() {
 			LOG.debug("prepare() begin...");
+			HashSet<String> files = ftpHelper.getAllFiles(path, 0, maxTraversalLevel);
+			String fileNameFilter = this.originConfig.getString(Key.PATH_FILTER);
 			
-			this.sourceFiles = ftpHelper.getAllFiles(path, 0, maxTraversalLevel);
+			if( fileNameFilter == null || "".equals(fileNameFilter)){
+				this.sourceFiles = files;
+			}else {
+				Pattern pat = Pattern.compile(fileNameFilter);				
+				for(String filename: files) {
+					if(pat.matcher(filename).matches())
+						this.sourceFiles.add(filename);
+				}
+			}
 			
 			LOG.info(String.format("您即将读取的文件数为: [%s]", this.sourceFiles.size()));
 		}
@@ -190,8 +221,25 @@ public class FtpReader extends Reader {
 			this.readerSliceConfig = this.getPluginJobConf();
 			this.host = readerSliceConfig.getString(Key.HOST);
 			this.protocol = readerSliceConfig.getString(Key.PROTOCOL);
-			this.username = readerSliceConfig.getString(Key.USERNAME);
-			this.password = readerSliceConfig.getString(Key.PASSWORD);
+			//优先从密码文件中读取用户名、密码
+			String passwordFile = readerSliceConfig.getString(Key.PASSWORD_FILE);
+			if( passwordFile != null && new File(passwordFile).exists()) {
+				Properties p = new Properties();
+				try {
+					p.load(new FileInputStream(passwordFile));
+					this.username = p.getProperty(Key.USERNAME);
+					this.password = p.getProperty(Key.PASSWORD);
+					
+				} catch (Exception e) {
+					System.out.println(e.getMessage());
+					throw DataXException.asDataXException(FtpReaderErrorCode.ILLEGAL_VALUE,
+							String.format("密码文件打开失败: [%s]", e.getMessage()));
+				}
+			}else {
+				this.username = readerSliceConfig.getString(Key.USERNAME);
+				this.password = readerSliceConfig.getString(Key.PASSWORD);
+			}
+
 			this.timeout = readerSliceConfig.getInt(Key.TIMEOUT, Constant.DEFAULT_TIMEOUT);
 
 			this.sourceFiles = this.readerSliceConfig.getList(Constant.SOURCE_FILES, String.class);
@@ -207,7 +255,6 @@ public class FtpReader extends Reader {
 				this.ftpHelper = new StandardFtpHelper();
 			}	
 			ftpHelper.loginFtpServer(host, username, password, port, timeout, connectPattern);
-
 		}
 
 		@Override
@@ -240,9 +287,25 @@ public class FtpReader extends Reader {
 				InputStream inputStream = null;
 				
 				inputStream = ftpHelper.getInputStream(fileName);
-	
-				UnstructuredStorageReaderUtil.readFromStream(inputStream, fileName, this.readerSliceConfig,
-						recordSender, this.getTaskPluginCollector());
+				
+				String fileExt = fileName.substring(fileName.lastIndexOf('.'));
+				FileFormat fmt;
+				
+				if(".xls".equalsIgnoreCase(fileExt)){
+					fmt = FileFormat.EXCEL2003;
+				}else if (".xlsx".equalsIgnoreCase(fileExt)) {
+					fmt = FileFormat.EXCEL2007;
+				}else {
+					fmt = FileFormat.TEXT;
+				}
+				
+				if (fmt == FileFormat.TEXT) {
+					UnstructuredStorageReaderUtil.readFromStream(inputStream, "[FTP]"+fileName, this.readerSliceConfig,
+							recordSender, this.getTaskPluginCollector());
+				}else {
+					UnstructuredStorageReaderUtil.readFromExcel(inputStream, fmt,
+							this.readerSliceConfig, "[FTP]"+fileName, recordSender, this.getTaskPluginCollector());
+				}
 				recordSender.flush();
 			}
 

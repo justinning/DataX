@@ -7,6 +7,8 @@ package com.alibaba.datax.common.element;
 public interface Record {
 
 	public void addColumn(Column column);
+	
+	public void addColumn(int i,Column column);
 
 	public void setColumn(int i, final Column column);
 

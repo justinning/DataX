@@ -2,6 +2,7 @@ package com.alibaba.datax.plugin.unstructuredstorage.reader;
 
 /**
  * Created by haiwei.luo on 14-12-5.
+ * Modified by justin on 2020-05-16
  */
 public class Key {
 	public static final String COLUMN = "column";
@@ -27,5 +28,16 @@ public class Key {
 	public static final String BUFFER_SIZE = "bufferSize";
 
 	public static final String CSV_READER_CONFIG = "csvReaderConfig";
+	
+	public static final String READ_FILE_ATTRS = "readFileAttrs";
+	
+	public static final String FILE_SPLIT_LINE = "fileSplitLine";
+	
+	public static final String BEFORE_SPLIT_LINE = "beforeSplitLine";
+	
+	public static final String HEADERLINE = "headerLine";	
 
+	public static final String SHEET_INDEXS = "sheetIndexs";
+	
+	public static final String SHEET_NAMES = "sheetNames";
 }

@@ -29,7 +29,10 @@ public class DirtyRecord implements Record {
 		this.columns.add(
                 DirtyColumn.asDirtyColumn(column, this.columns.size()));
 	}
-
+	@Override
+	public void addColumn(int i,Column column) {
+		// unimplmention
+	}
 	@Override
 	public String toString() {
 		return JSON.toJSONString(this.columns);

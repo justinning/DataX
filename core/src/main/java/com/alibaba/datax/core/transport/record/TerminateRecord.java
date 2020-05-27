@@ -20,7 +20,9 @@ public class TerminateRecord implements Record {
 	@Override
 	public void addColumn(Column column) {
 	}
-
+	@Override
+	public void addColumn(int i, Column column) {
+	}
 	@Override
 	public Column getColumn(int i) {
 		return null;

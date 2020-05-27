@@ -104,50 +104,23 @@ public class TxtFileReader extends Reader {
 
 			// column: 1. index type 2.value type 3.when type is Date, may have
 			// format
-			List<Configuration> columns = this.originConfig
-					.getListConfiguration(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.COLUMN);
-			// handle ["*"]
-			if (null != columns && 1 == columns.size()) {
-				String columnsInStr = columns.get(0).toString();
-				if ("\"*\"".equals(columnsInStr) || "'*'".equals(columnsInStr)) {
-					this.originConfig
-							.set(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.COLUMN,
-									null);
-					columns = null;
-				}
+			UnstructuredStorageReaderUtil.validateColumn(originConfig);
+
+			// fileSplitLine
+			String splitLine = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILE_SPLIT_LINE);			
+			if( "".equals(splitLine)) {
+				throw DataXException.asDataXException(
+						TxtFileReaderErrorCode.ILLEGAL_VALUE,String.format("文件分隔行(%s)不能配置为空",
+								com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILE_SPLIT_LINE));
 			}
-
-			if (null != columns && columns.size() != 0) {
-				for (Configuration eachColumnConf : columns) {
-					eachColumnConf
-							.getNecessaryValue(
-									com.alibaba.datax.plugin.unstructuredstorage.reader.Key.TYPE,
-									TxtFileReaderErrorCode.REQUIRED_VALUE);
-					Integer columnIndex = eachColumnConf
-							.getInt(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.INDEX);
-					String columnValue = eachColumnConf
-							.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.VALUE);
-
-					if (null == columnIndex && null == columnValue) {
-						throw DataXException.asDataXException(
-								TxtFileReaderErrorCode.NO_INDEX_VALUE,
-								"由于您配置了type, 则至少需要配置 index 或 value");
-					}
-
-					if (null != columnIndex && null != columnValue) {
-						throw DataXException.asDataXException(
-								TxtFileReaderErrorCode.MIXED_INDEX_VALUE,
-								"您混合配置了index, value, 每一列同时仅能选择其中一种");
-					}
-					if (null != columnIndex && columnIndex < 0) {
-						throw DataXException.asDataXException(
-								TxtFileReaderErrorCode.ILLEGAL_VALUE, String
-										.format("index需要大于等于0, 您配置的index为[%s]",
-												columnIndex));
-					}
-				}
+			Boolean beforeSplitLine = this.originConfig.getBool(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.BEFORE_SPLIT_LINE);
+			if ( beforeSplitLine != null && splitLine == null) {
+				throw DataXException.asDataXException(
+						TxtFileReaderErrorCode.ILLEGAL_VALUE,String.format("配置了%s，但未配置文件分隔行%s",
+								com.alibaba.datax.plugin.unstructuredstorage.reader.Key.BEFORE_SPLIT_LINE,
+								com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILE_SPLIT_LINE));
 			}
-
+			
 			// only support compress types
 			String compress = this.originConfig
 					.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.COMPRESS);

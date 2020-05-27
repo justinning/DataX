@@ -10,4 +10,6 @@ public class Key {
 	public static final String CONNECTPATTERN = "connectPattern";
 	public static final String PATH = "path";
 	public static final String MAXTRAVERSALLEVEL = "maxTraversalLevel";
+	public static final String PATH_FILTER = "pathFilter";
+	public static final String PASSWORD_FILE = "passwordFile";
 }

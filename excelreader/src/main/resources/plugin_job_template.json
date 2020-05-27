@@ -1,0 +1,12 @@
+{
+	"name": "excelreader",
+	"parameter": {
+		"path": [],
+		"column": [],
+		"sheetIndexs": [],
+		"sheetNames": "",
+		"headerLine": 1,
+		"skipHeader": true,
+		"readFileAttrs": false
+	}
+}

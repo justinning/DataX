@@ -10,4 +10,8 @@ public class Constant {
 	public static final String DEFAULT_NULL_FORMAT = "\\N";
 	
     public static final Integer DEFAULT_BUFFER_SIZE = 8192;
+    
+    public static final String FIELD_NAME_FILEPATH = "__filepath";
+    
+    public static final String FIELD_NAME_LINE = "__line";
 }

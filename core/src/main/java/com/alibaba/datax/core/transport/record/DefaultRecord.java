@@ -38,6 +38,12 @@ public class DefaultRecord implements Record {
 	}
 
 	@Override
+	public void addColumn(int i, Column column) {
+		columns.add(i, column);
+		incrByteSize(column);
+	}
+	
+	@Override
 	public Column getColumn(int i) {
 		if (i < 0 || i >= columns.size()) {
 			return null;
