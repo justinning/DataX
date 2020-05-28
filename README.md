@@ -1,4 +1,4 @@
-![Datax-logo](https://github.com/justinning/DataX/blob/master/images/DataX-logo.jpg)
+![Datax-logo](https://github.com/justinning/DataX/blob/master/images/DataX-logo.png)
 
 
 
