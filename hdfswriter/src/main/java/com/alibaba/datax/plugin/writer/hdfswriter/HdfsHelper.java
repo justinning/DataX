@@ -282,6 +282,7 @@ public  class HdfsHelper {
     public void textFileStartWrite(RecordReceiver lineReceiver, Configuration config, String fileName,
                                    TaskPluginCollector taskPluginCollector){
         char fieldDelimiter = config.getChar(Key.FIELD_DELIMITER);
+        String nullFormat = config.getString(Key.NULL_FORMAT,null);
         List<Configuration>  columns = config.getListConfiguration(Key.COLUMN);
         String compress = config.getString(Key.COMPRESS,null);
 
@@ -310,7 +311,7 @@ public  class HdfsHelper {
                       columns.add(Configuration.from(String.format("{\"name\":\"index-%d\",\"type\":\"string\"}", new Object[] { Integer.valueOf(i) })));
                     }
                 }
-                MutablePair<Text, Boolean> transportResult = transportOneRecord(record, fieldDelimiter, columns, taskPluginCollector);
+                MutablePair<Text, Boolean> transportResult = transportOneRecord(record, fieldDelimiter, nullFormat, columns, taskPluginCollector);
                 if (!transportResult.getRight()) {
                     writer.write(NullWritable.get(),transportResult.getLeft());
                 }
@@ -326,8 +327,8 @@ public  class HdfsHelper {
     }
 
     public static MutablePair<Text, Boolean> transportOneRecord(
-            Record record, char fieldDelimiter, List<Configuration> columnsConfiguration, TaskPluginCollector taskPluginCollector) {
-        MutablePair<List<Object>, Boolean> transportResultList =  transportOneRecord(record,columnsConfiguration,taskPluginCollector);
+            Record record, char fieldDelimiter, String nullFormat, List<Configuration> columnsConfiguration, TaskPluginCollector taskPluginCollector) {
+        MutablePair<List<Object>, Boolean> transportResultList =  transportOneRecord(record,nullFormat,columnsConfiguration, taskPluginCollector);
         //保存<转换后的数据,是否是脏数据>
         MutablePair<Text, Boolean> transportResult = new MutablePair<Text, Boolean>();
         transportResult.setRight(false);
@@ -370,6 +371,7 @@ public  class HdfsHelper {
                                   TaskPluginCollector taskPluginCollector){
         List<Configuration>  columns = config.getListConfiguration(Key.COLUMN);
         String compress = config.getString(Key.COMPRESS, null);
+        String nullFormat = config.getString(Key.NULL_FORMAT,null);
         List<String> columnNames = getColumnNames(columns);
         List<ObjectInspector> columnTypeInspectors = getColumnTypeInspectors(columns);
         StructObjectInspector inspector = (StructObjectInspector)ObjectInspectorFactory
@@ -388,7 +390,7 @@ public  class HdfsHelper {
             RecordWriter writer = outFormat.getRecordWriter(fileSystem, conf, fileName, Reporter.NULL);
             Record record = null;
             while ((record = lineReceiver.getFromReader()) != null) {
-                MutablePair<List<Object>, Boolean> transportResult =  transportOneRecord(record,columns,taskPluginCollector);
+                MutablePair<List<Object>, Boolean> transportResult =  transportOneRecord(record,nullFormat,columns, taskPluginCollector);
                 if (!transportResult.getRight()) {
                     writer.write(NullWritable.get(), orcSerde.serialize(transportResult.getLeft(), inspector));
                 }
@@ -485,10 +487,11 @@ public  class HdfsHelper {
     }
 
     public static MutablePair<List<Object>, Boolean> transportOneRecord(
-            Record record,List<Configuration> columnsConfiguration,
-            TaskPluginCollector taskPluginCollector){
+            Record record,String nullFormat,
+            List<Configuration> columnsConfiguration, TaskPluginCollector taskPluginCollector){
 
         MutablePair<List<Object>, Boolean> transportResult = new MutablePair<List<Object>, Boolean>();
+        
         transportResult.setRight(false);
         List<Object> recordList = Lists.newArrayList();
         int recordLength = record.getColumnNumber();
@@ -556,7 +559,7 @@ public  class HdfsHelper {
                     }
                 }else {
                     // warn: it's all ok if nullFormat is null
-                    recordList.add(null);
+                    recordList.add(nullFormat);
                 }
             }
         }
