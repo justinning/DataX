@@ -251,6 +251,14 @@ HdfsWriter提供向HDFS文件系统指定路径中写入TEXTFile文件和ORCFile
 
 	* 默认值：无 <br />
 
+* **nullFormat**
+
+	* 描述：如果源字段是null值，hdfswriter写入时用nullFormat指定的字符代替,未指定时，string型字段写入空字符，非string新字段写入空字符。**需要用户保证与创建的Hive表时SERDEPROPERTIES中的serialization.null.format一致，否则在Hive中会出现转换错误。** <br />
+
+	* 必选：否 <br />
+
+	* 默认值：无 <br />
+
 * **compress**
 
 	* 描述：hdfs文件压缩类型，默认不填写意味着没有压缩。其中：text类型文件支持压缩类型有gzip、bzip2;orc类型文件支持的压缩类型有NONE、SNAPPY（需要用户安装SnappyCodec）。 <br />
