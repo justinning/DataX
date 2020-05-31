@@ -3,10 +3,24 @@
 # Purpose：实现了DataX 的Restful API
 # Author: Justin
 
-# API 示例
+'''''''''''''''''''''''''''
+        API 示例
+'''''''''''''''''''''''''''
 # 启动一个Job，返回Job ID
 # JOB_DESC=`cat xxxx.json`
-# curl -d "jobDesc=$JOB_DESC&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020 -Dmonth=05 -Dday=26\"" http://localhost:9999/startJob
+# curl -d "jobDesc=$JOB_DESC&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
+# 
+# 查询所有Job ID列表
+# curl http://localhost:9999/jobs
+
+# 查询Job状态
+# curl http://localhost:9999/job/1
+# curl http://localhost:9999/job/1/attr
+# attr可以是stdout,stderr,status,errmsg
+
+# 中止并移除一个Job
+# curl -X DELETE http://localhost:9999/job/1
+
 import os
 import subprocess
 from subprocess import PIPE
@@ -98,7 +112,7 @@ def start_job_worker(jobid,jvmArgs, params,jobDesc):
         os.unlink(filepath)
 
 # 启动一个新的job
-@app.route('/startJob', methods=['POST'])
+@app.route('/job', methods=['POST'])
 def start_job():
     try:
         if False:
@@ -173,30 +187,6 @@ def get_job(jobid='',attr=None):
                 return 'Job {} has no \"{}\" attribute.'.format(jobid,attr)
 
 
-# Kill 一个在执行的Job
-@app.route('/killJob/<path:jobid>',methods=['GET'])
-def kill_job(jobid=''):
-
-    jobInfo = getjobInfo(jobid)
-    reqResult = {}
-
-    if jobInfo is None:
-        reqResult["status"] = "error"
-        reqResult["errmsg"] = 'Job {} not found.'.format(jobid)
-    else:
-        if not jobInfo.has_key("return_code"):
-            try:
-                t = jobInfo["jobThread"]
-                stop_thread(t)
-            except Exception as e:
-                print(e)
-            # 移除该job
-            jobInfos.pop(jobid)
-            reqResult["status"] = "success"
-        else:
-            reqResult["status"] = "error"
-            reqResult["errmsg"] = 'Job {} has been terminated.'.format(jobid)
-    return json.dumps(reqResult)
 
 # 移除一个Job，如果它正在运行则先kill掉再移除
 @app.route('/job/<path:jobid>',methods=['DELETE'])
@@ -215,6 +205,9 @@ def remove_jobid(jobid=''):
                 stop_thread(t)
             except Exception as e:
                 print(e)
+            reqResult["errmsg"] = "Job {} has been killed.".format(jobid)
+        else:
+            reqResult["errmsg"] = 'Job {} has completed before this.'.format(jobid)
         
         # 移除该job
         jobInfos.pop(jobid)
