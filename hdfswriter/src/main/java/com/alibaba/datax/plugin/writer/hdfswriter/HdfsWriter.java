@@ -187,8 +187,9 @@ public class HdfsWriter extends Writer {
                             String.format("由于您配置了writeMode nonConflict,但您配置的path: [%s] 目录不为空, 下面存在其他文件或文件夹.", path));
                 }
             }else{
-                throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
-                        String.format("您配置的path: [%s] 不存在, 请先在hive端创建对应的数据库和表.", path));
+            	hdfsHelper.createDir(new Path(path));
+                //throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
+                //        String.format("您配置的path: [%s] 不存在, 请先在hive端创建对应的数据库和表.", path));
             }
         }
 
