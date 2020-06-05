@@ -2,6 +2,7 @@ package com.alibaba.datax.plugin.reader.ftpreader;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -58,7 +59,8 @@ public class FtpReader extends Reader {
 				this.port = originConfig.getInt(Key.PORT, Constant.DEFAULT_FTP_PORT);
 				this.ftpHelper = new StandardFtpHelper();
 			}		
-			ftpHelper.loginFtpServer(host, username, password, port, timeout, connectPattern);
+			boolean bBinaryFile = originConfig.getBool(Key.BINARY_FILE,false);
+			ftpHelper.loginFtpServer(host, username, password, port, timeout, connectPattern, bBinaryFile);
 
 		}
 
@@ -254,7 +256,8 @@ public class FtpReader extends Reader {
 				this.connectPattern = readerSliceConfig.getString(Key.CONNECTPATTERN, Constant.DEFAULT_FTP_CONNECT_PATTERN);// 默认为被动模式
 				this.ftpHelper = new StandardFtpHelper();
 			}	
-			ftpHelper.loginFtpServer(host, username, password, port, timeout, connectPattern);
+			boolean bBinaryFile = readerSliceConfig.getBool(Key.BINARY_FILE,false);
+			ftpHelper.loginFtpServer(host, username, password, port, timeout, connectPattern, bBinaryFile);
 		}
 
 		@Override
@@ -286,25 +289,35 @@ public class FtpReader extends Reader {
 				LOG.info(String.format("reading file : [%s]", fileName));
 				InputStream inputStream = null;
 				
-				inputStream = ftpHelper.getInputStream(fileName);
-				
-				String fileExt = fileName.substring(fileName.lastIndexOf('.'));
-				FileFormat fmt;
-				
-				if(".xls".equalsIgnoreCase(fileExt)){
-					fmt = FileFormat.EXCEL2003;
-				}else if (".xlsx".equalsIgnoreCase(fileExt)) {
-					fmt = FileFormat.EXCEL2007;
-				}else {
-					fmt = FileFormat.TEXT;
-				}
-				
-				if (fmt == FileFormat.TEXT) {
-					UnstructuredStorageReaderUtil.readFromStream(inputStream, "[FTP]"+fileName, this.readerSliceConfig,
-							recordSender, this.getTaskPluginCollector());
-				}else {
-					UnstructuredStorageReaderUtil.readFromExcel(inputStream, fmt,
-							this.readerSliceConfig, "[FTP]"+fileName, recordSender, this.getTaskPluginCollector());
+				try {
+					inputStream = ftpHelper.getInputStream(fileName);
+					
+					String fileExt = fileName.substring(fileName.lastIndexOf('.'));
+					FileFormat fmt;
+					
+					if(".xls".equalsIgnoreCase(fileExt)){
+						fmt = FileFormat.EXCEL2003;
+					}else if (".xlsx".equalsIgnoreCase(fileExt)) {
+						fmt = FileFormat.EXCEL2007;
+					}else {
+						fmt = FileFormat.TEXT;
+					}
+					
+					if (fmt == FileFormat.TEXT) {
+						UnstructuredStorageReaderUtil.readFromStream(inputStream, "[FTP]"+fileName, this.readerSliceConfig,
+								recordSender, this.getTaskPluginCollector());
+					}else {
+						UnstructuredStorageReaderUtil.readFromExcel( inputStream,fmt, this.readerSliceConfig,
+									fileName, recordSender, this.getTaskPluginCollector());
+					}
+				}finally {
+					if (inputStream != null) {
+						try {
+							inputStream.close();							
+						} catch (IOException e) {
+						}
+						ftpHelper.readFilePost();
+					}
 				}
 				recordSender.flush();
 			}

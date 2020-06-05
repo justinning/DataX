@@ -22,7 +22,7 @@ public class StandardFtpHelper extends FtpHelper {
 
 	@Override
 	public void loginFtpServer(String host, String username, String password, int port, int timeout,
-			String connectMode) {
+			String connectMode, boolean bBinaryType) {
 		ftpClient = new FTPClient();
 		try {
 			// 连接
@@ -57,6 +57,12 @@ public class StandardFtpHelper extends FtpHelper {
 				fileEncoding = "UTF-8";
 			}
 			ftpClient.setControlEncoding(fileEncoding);
+			if(bBinaryType) {
+				ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
+			}else {
+				ftpClient.setFileType(FTP.ASCII_FILE_TYPE);
+			}
+			
 		} catch (UnknownHostException e) {
 			String message = String.format("请确认ftp服务器地址是否正确，无法连接到地址为: [%s] 的ftp服务器", host);
 			LOG.error(message);
@@ -230,5 +236,14 @@ public class StandardFtpHelper extends FtpHelper {
 			throw DataXException.asDataXException(FtpReaderErrorCode.OPEN_FILE_ERROR, message);
 		}
 	}
-
+	
+	@Override
+	public void readFilePost() {
+		if( ftpClient != null) {
+			try {
+				ftpClient.completePendingCommand();
+			} catch (IOException e) {
+			}
+		}
+	}
 }

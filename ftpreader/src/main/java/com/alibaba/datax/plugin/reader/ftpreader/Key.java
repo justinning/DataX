@@ -12,4 +12,5 @@ public class Key {
 	public static final String MAXTRAVERSALLEVEL = "maxTraversalLevel";
 	public static final String PATH_FILTER = "pathFilter";
 	public static final String PASSWORD_FILE = "passwordFile";
+	public static final String BINARY_FILE = "binaryFile";
 }

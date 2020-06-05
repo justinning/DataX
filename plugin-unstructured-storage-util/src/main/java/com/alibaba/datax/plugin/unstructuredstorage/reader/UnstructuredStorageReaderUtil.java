@@ -469,7 +469,8 @@ public class UnstructuredStorageReaderUtil {
 					column.add(c);
 				}
 			}
-
+			
+			//大文件需要较大内存, 200m文件 大约-Xms4096m -Xmx4096m 
 			List<String[]> dataFrame = ExcelParserHelper.parse(inputStream,
 					format,
 					readerSliceConfig.getInt(Key.HEADERLINE,1),
@@ -805,7 +806,8 @@ public class UnstructuredStorageReaderUtil {
 
 	public static void validateFieldDelimiter(Configuration readerConfiguration) {
 		//fieldDelimiter check
-		String delimiterInStr = readerConfiguration.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FIELD_DELIMITER,null);
+		String delimiterInStr = readerConfiguration.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FIELD_DELIMITER,
+				String.valueOf(Constant.DEFAULT_FIELD_DELIMITER));
 		if(null == delimiterInStr){
 			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.REQUIRED_VALUE,
 					String.format("您提供配置文件有误，[%s]是必填参数.",

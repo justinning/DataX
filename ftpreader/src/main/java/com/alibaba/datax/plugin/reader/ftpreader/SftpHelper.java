@@ -26,7 +26,7 @@ public class SftpHelper extends FtpHelper {
 	ChannelSftp channelSftp = null;
 	@Override
 	public void loginFtpServer(String host, String username, String password, int port, int timeout,
-			String connectMode) {
+			String connectMode, boolean bBinaryType) {
 		JSch jsch = new JSch(); // 创建JSch对象
 		try {
 			session = jsch.getSession(username, host, port);

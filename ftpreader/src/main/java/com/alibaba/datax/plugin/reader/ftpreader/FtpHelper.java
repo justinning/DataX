@@ -5,20 +5,8 @@ import java.util.HashSet;
 import java.util.List;
 
 public abstract class FtpHelper {
-	/**
-	 * 
-	* @Title: LoginFtpServer 
-	* @Description: 与ftp服务器建立连接
-	* @param @param host
-	* @param @param username
-	* @param @param password
-	* @param @param port
-	* @param @param timeout
-	* @param @param connectMode     
-	* @return void 
-	* @throws
-	 */
-	public abstract void loginFtpServer(String host, String username, String password, int port, int timeout,String connectMode) ;
+
+	public abstract void loginFtpServer(String host, String username, String password, int port, int timeout,String connectMode, boolean bBinaryType) ;
 	/**
 	 * 
 	* @Title: LogoutFtpServer 
@@ -103,5 +91,7 @@ public abstract class FtpHelper {
 		}
 		return sourceAllFiles;
 	}
-
+	
+	public void readFilePost() {
+	}
 }

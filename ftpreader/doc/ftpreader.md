@@ -257,6 +257,14 @@ FtpReader实现了从远程FTP文件读取数据并转为DataX协议的功能，
 
  	* 默认值：\N <br />
 
+* **binaryFile**
+
+	* 描述：是否按二进制文件下载
+
+ 	* 必选：否 <br />
+
+ 	* 默认值：false <br />
+ 	
 Excel文件配置参数:
 * **sheetIndexs**
 
