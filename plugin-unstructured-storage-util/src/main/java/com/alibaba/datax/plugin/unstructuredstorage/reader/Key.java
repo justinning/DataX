@@ -40,4 +40,6 @@ public class Key {
 	public static final String SHEET_INDEXS = "sheetIndexs";
 	
 	public static final String SHEET_NAMES = "sheetNames";
+	
+	public static final String READ_MODE = "readMode";
 }

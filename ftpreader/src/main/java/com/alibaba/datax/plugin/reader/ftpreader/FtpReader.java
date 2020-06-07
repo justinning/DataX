@@ -18,7 +18,10 @@ import com.alibaba.datax.common.plugin.RecordSender;
 import com.alibaba.datax.common.spi.Reader;
 import com.alibaba.datax.common.util.Configuration;
 import com.alibaba.datax.plugin.unstructuredstorage.reader.FileFormat;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.FileInfo;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.FileStatusManage;
 import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderUtil;
+import com.alibaba.fastjson.JSONObject;
 
 public class FtpReader extends Reader {
 	public static class Job extends Reader.Job {
@@ -28,7 +31,7 @@ public class FtpReader extends Reader {
 
 		private List<String> path = null;
 
-		private HashSet<String> sourceFiles;
+		private HashSet<FileInfo> sourceFiles;
 
 		// ftp链接参数
 		private String protocol;
@@ -39,13 +42,14 @@ public class FtpReader extends Reader {
 		private int timeout;
 		private String connectPattern;
 		private int maxTraversalLevel;
-
+		
 		private FtpHelper ftpHelper = null;
-
+		private FileStatusManage statusManage = new FileStatusManage();
+		
 		@Override
 		public void init() {
 			this.originConfig = this.getPluginJobConf();
-			this.sourceFiles = new HashSet<String>();
+			this.sourceFiles = new HashSet<FileInfo>();
 
 			this.validateParameter();
 			UnstructuredStorageReaderUtil.validateParameter(this.originConfig);
@@ -128,19 +132,26 @@ public class FtpReader extends Reader {
 		@Override
 		public void prepare() {
 			LOG.debug("prepare() begin...");
-			HashSet<String> files = ftpHelper.getAllFiles(path, 0, maxTraversalLevel);
+			HashSet<FileInfo> files = ftpHelper.getAllFiles(path, 0, maxTraversalLevel);
+
+			// full,different,latest
+			String readMode = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.READ_MODE, 
+				com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL);
+			
 			String fileNameFilter = this.originConfig.getString(Key.PATH_FILTER);
 			
 			if( fileNameFilter == null || "".equals(fileNameFilter)){
-				this.sourceFiles = files;
+				for(FileInfo file: files) {
+					if(statusManage.isNewFile(this.host, file, readMode))
+						this.sourceFiles.add(file);
+				}				
 			}else {
 				Pattern pat = Pattern.compile(fileNameFilter);				
-				for(String filename: files) {
-					if(pat.matcher(filename).matches())
-						this.sourceFiles.add(filename);
+				for(FileInfo file: files) {
+					if(pat.matcher(file.getPath()).matches() && statusManage.isNewFile(this.host, file, readMode))
+						this.sourceFiles.add(file);
 				}
 			}
-			
 			LOG.info(String.format("您即将读取的文件数为: [%s]", this.sourceFiles.size()));
 		}
 
@@ -170,15 +181,23 @@ public class FtpReader extends Reader {
 			// int splitNumber = adviceNumber;
 			int splitNumber = this.sourceFiles.size();
 			if (0 == splitNumber) {
-				throw DataXException.asDataXException(FtpReaderErrorCode.EMPTY_DIR_EXCEPTION,
-						String.format("未能找到待读取的文件,请确认您的配置项path: %s", this.originConfig.getString(Key.PATH)));
-			}
-
-			List<List<String>> splitedSourceFiles = this.splitSourceFiles(new ArrayList(this.sourceFiles), splitNumber);
-			for (List<String> files : splitedSourceFiles) {
+				//throw DataXException.asDataXException(FtpReaderErrorCode.EMPTY_DIR_EXCEPTION,
+				//		String.format("未能找到待读取的文件,请确认您的配置项path: %s", this.originConfig.getString(Key.PATH)));
+				String strJson = JSONObject.toJSONString(new ArrayList<FileInfo>());
 				Configuration splitedConfig = this.originConfig.clone();
-				splitedConfig.set(Constant.SOURCE_FILES, files);
+				splitedConfig.set(Constant.SOURCE_FILES, strJson);
 				readerSplitConfigs.add(splitedConfig);
+				
+			}else {
+				List<List<FileInfo>> splitedSourceFiles = this.splitSourceFiles(new ArrayList(this.sourceFiles),
+						splitNumber);
+				for (List<FileInfo> files : splitedSourceFiles) {
+					Configuration splitedConfig = this.originConfig.clone();
+					// splitedConfig.set(Constant.SOURCE_FILES, files);
+					String strJson = JSONObject.toJSONString(files);
+					splitedConfig.set(Constant.SOURCE_FILES, strJson);
+					readerSplitConfigs.add(splitedConfig);
+				}
 			}
 			LOG.debug("split() ok and end...");
 			return readerSplitConfigs;
@@ -213,10 +232,11 @@ public class FtpReader extends Reader {
 		private String connectPattern;
 
 		private Configuration readerSliceConfig;
-		private List<String> sourceFiles;
+		private List<FileInfo> sourceFiles;
 
 		private FtpHelper ftpHelper = null;
-
+		private FileStatusManage statusManage = new FileStatusManage();
+		
 		@Override
 		public void init() {//连接重试
 			/* for ftp connection */
@@ -244,8 +264,10 @@ public class FtpReader extends Reader {
 
 			this.timeout = readerSliceConfig.getInt(Key.TIMEOUT, Constant.DEFAULT_TIMEOUT);
 
-			this.sourceFiles = this.readerSliceConfig.getList(Constant.SOURCE_FILES, String.class);
-
+			//this.sourceFiles = this.readerSliceConfig.getList(Constant.SOURCE_FILES, FileInfo.class);
+			String strJson = this.readerSliceConfig.getString(Constant.SOURCE_FILES);
+			this.sourceFiles = JSONObject.parseArray(strJson,FileInfo.class);
+			
 			if ("sftp".equals(protocol)) {
 				//sftp协议
 				this.port = readerSliceConfig.getInt(Key.PORT, Constant.DEFAULT_SFTP_PORT);
@@ -285,7 +307,9 @@ public class FtpReader extends Reader {
 		@Override
 		public void startRead(RecordSender recordSender) {
 			LOG.debug("start read source files...");
-			for (String fileName : this.sourceFiles) {
+			
+			for (FileInfo f : this.sourceFiles) {
+				String fileName = f.getPath();
 				LOG.info(String.format("reading file : [%s]", fileName));
 				InputStream inputStream = null;
 				
@@ -321,7 +345,18 @@ public class FtpReader extends Reader {
 				}
 				recordSender.flush();
 			}
-
+			
+			//TODO: 如果脏数据超过阈值，不更新文件状态
+			String readMode = this.readerSliceConfig.getString(
+					com.alibaba.datax.plugin.unstructuredstorage.reader.Key.READ_MODE,
+					com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL);
+			
+			
+			if (!readMode.equals(com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL)) {
+				for (FileInfo f : sourceFiles) {
+					statusManage.updateStatus(this.host, f);
+				}
+			}
 			LOG.debug("end read source files...");
 		}
 

@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.alibaba.datax.common.exception.DataXException;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.FileInfo;
 import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderUtil;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
@@ -149,9 +150,9 @@ public class SftpHelper extends FtpHelper {
 		}
 	}
 
-	HashSet<String> sourceFiles = new HashSet<String>();
+	HashSet<FileInfo> sourceFiles = new HashSet<FileInfo>();
 	@Override
-	public HashSet<String> getListFiles(String directoryPath, int parentLevel, int maxTraversalLevel) {
+	public HashSet<FileInfo> getListFiles(String directoryPath, int parentLevel, int maxTraversalLevel) {
 		if(parentLevel < maxTraversalLevel){
 			String parentPath = null;// 父级目录,以'/'结尾
 			int pathLen = directoryPath.length();
@@ -181,7 +182,7 @@ public class SftpHelper extends FtpHelper {
 				throw DataXException.asDataXException(FtpReaderErrorCode.LINK_FILE, message);
 			}else if (isFileExist(directoryPath)) {
 				// path指向具体文件
-				sourceFiles.add(directoryPath);
+				sourceFiles.add(new FileInfo(directoryPath,getFileTimestamp(directoryPath)));
 				return sourceFiles;
 			} else {
 				String message = String.format("请确认您的配置项path:[%s]存在，且配置的用户有权限读取", directoryPath);
@@ -209,7 +210,7 @@ public class SftpHelper extends FtpHelper {
 						throw DataXException.asDataXException(FtpReaderErrorCode.LINK_FILE, message);
 					}else if (isFileExist(filePath)) {
 						// 是文件
-						sourceFiles.add(filePath);
+						sourceFiles.add(new FileInfo(filePath,getFileTimestamp(filePath)));
 					} else {
 						String message = String.format("请确认path:[%s]存在，且配置的用户有权限读取", filePath);
 						LOG.error(message);
@@ -241,6 +242,28 @@ public class SftpHelper extends FtpHelper {
 			LOG.error(message);
 			throw DataXException.asDataXException(FtpReaderErrorCode.OPEN_FILE_ERROR, message);
 		}
+	}
+
+	@Override
+	public long getFileTimestamp(String filePath) {
+		try {
+			SftpATTRS sftpATTRS = channelSftp.lstat(filePath);			
+			if(sftpATTRS.getSize() >= 0){
+				//单位转换为毫秒
+				return ((long)sftpATTRS.getMTime() * 1000);
+			}
+		} catch (SftpException e) {
+			if (e.getMessage().toLowerCase().equals("no such file")) {
+				String message = String.format("请确认您的配置项path:[%s]存在，且配置的用户有权限读取", filePath);
+				LOG.error(message);
+				throw DataXException.asDataXException(FtpReaderErrorCode.FILE_NOT_EXISTS, message);
+			} else {
+				String message = String.format("获取文件：[%s] 属性时发生I/O异常,请确认与ftp服务器的连接正常", filePath);
+				LOG.error(message);
+				throw DataXException.asDataXException(FtpReaderErrorCode.COMMAND_FTP_IO_EXCEPTION, message, e);
+			}
+		}
+		return 0;
 	}
 
 }

@@ -4,6 +4,8 @@ import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
 
+import com.alibaba.datax.plugin.unstructuredstorage.reader.FileInfo;
+
 public abstract class FtpHelper {
 
 	public abstract void loginFtpServer(String host, String username, String password, int port, int timeout,String connectMode, boolean bBinaryType) ;
@@ -58,7 +60,7 @@ public abstract class FtpHelper {
 	* @return HashSet<String> 
 	* @throws
 	 */
-	public abstract HashSet<String> getListFiles(String directoryPath, int parentLevel, int maxTraversalLevel);
+	public abstract HashSet<FileInfo> getListFiles(String directoryPath, int parentLevel, int maxTraversalLevel);
 	
 	/**
 	 * 
@@ -82,8 +84,8 @@ public abstract class FtpHelper {
 	* @return HashSet<String> 
 	* @throws
 	 */
-	public HashSet<String> getAllFiles(List<String> srcPaths, int parentLevel, int maxTraversalLevel){
-		HashSet<String> sourceAllFiles = new HashSet<String>();
+	public HashSet<FileInfo> getAllFiles(List<String> srcPaths, int parentLevel, int maxTraversalLevel){
+		HashSet<FileInfo> sourceAllFiles = new HashSet<FileInfo>();
 		if (!srcPaths.isEmpty()) {
 			for (String eachPath : srcPaths) {
 				sourceAllFiles.addAll(getListFiles(eachPath, parentLevel, maxTraversalLevel));
@@ -94,4 +96,5 @@ public abstract class FtpHelper {
 	
 	public void readFilePost() {
 	}
+	public abstract long getFileTimestamp(String filePath);
 }

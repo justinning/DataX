@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.alibaba.datax.common.exception.DataXException;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.FileInfo;
 import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderUtil;
 
 public class StandardFtpHelper extends FtpHelper {
@@ -148,9 +149,9 @@ public class StandardFtpHelper extends FtpHelper {
 		return isExitFlag;
 	}
 
-	HashSet<String> sourceFiles = new HashSet<String>();
+	HashSet<FileInfo> sourceFiles = new HashSet<FileInfo>();
 	@Override
-	public HashSet<String> getListFiles(String directoryPath, int parentLevel, int maxTraversalLevel) {
+	public HashSet<FileInfo> getListFiles(String directoryPath, int parentLevel, int maxTraversalLevel) {
 		if(parentLevel < maxTraversalLevel){
 			String parentPath = null;// 父级目录,以'/'结尾
 			int pathLen = directoryPath.length();
@@ -174,7 +175,7 @@ public class StandardFtpHelper extends FtpHelper {
 				}
 			} else if (isFileExist(directoryPath)) {
 				// path指向具体文件
-				sourceFiles.add(directoryPath);
+				sourceFiles.add(new FileInfo(directoryPath,getFileTimestamp(directoryPath)));
 				return sourceFiles;
 			} else if(isSymbolicLink(directoryPath)){
 				//path是链接文件
@@ -199,7 +200,7 @@ public class StandardFtpHelper extends FtpHelper {
 						}
 					} else if (ff.isFile()) {
 						// 是文件
-						sourceFiles.add(filePath);						
+						sourceFiles.add(new FileInfo(filePath,ff.getTimestamp().getTimeInMillis()));
 					} else if(ff.isSymbolicLink()){
 						//是链接文件
 						String message = String.format("文件:[%s]是链接文件，当前不支持链接文件的读取", filePath);
@@ -235,6 +236,23 @@ public class StandardFtpHelper extends FtpHelper {
 			LOG.error(message);
 			throw DataXException.asDataXException(FtpReaderErrorCode.OPEN_FILE_ERROR, message);
 		}
+	}
+	
+	@Override
+	public long getFileTimestamp(String filePath) {
+		
+		try {
+			
+			FTPFile[] ftpFiles = ftpClient.listFiles(new String(filePath.getBytes(),FTP.DEFAULT_CONTROL_ENCODING));
+			if (ftpFiles.length == 1 && ftpFiles[0].isFile()) {
+				return ftpFiles[0].getTimestamp().getTimeInMillis();
+			}
+		} catch (IOException e) {
+			String message = String.format("获取文件：[%s] 属性时发生I/O异常,请确认与ftp服务器的连接正常", filePath);
+			LOG.error(message);
+			throw DataXException.asDataXException(FtpReaderErrorCode.COMMAND_FTP_IO_EXCEPTION, message, e);
+		}
+		return 0;
 	}
 	
 	@Override

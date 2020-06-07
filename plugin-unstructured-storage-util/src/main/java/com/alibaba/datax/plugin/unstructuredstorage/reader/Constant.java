@@ -14,4 +14,10 @@ public class Constant {
     public static final String FIELD_NAME_FILEPATH = "__filepath";
     
     public static final String FIELD_NAME_LINE = "__line";
+  
+    public static final String READ_FULL = "full";
+
+    public static final String READ_DIFFERENT = "different";
+    
+    public static final String READ_LATEST = "latest";
 }
