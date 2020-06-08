@@ -1,6 +1,13 @@
 ![Datax-logo](https://github.com/justinning/DataX/blob/master/images/DataX-logo.png)
 
-
+# DataX 增强版
+与DataX 主干代码保持同步更新。在DataX的基础上，增加了若干新特性：
+1. 增加了ExcelReader，支持Excel2003和Excel2007两个不同格式及超大Excel文件，可自定义单元格数字格式
+2. FtpReader可以同时读取文本文件和Excel文件
+3. FtpReader支持按文件时间戳比较实现，全量，差异，最新三种不同的读取模式
+4. TxtFileReader/ExcelReader/FtpReader 均可以根据字段名读取文件中的部分字段列，与字段顺序无关
+5. 增加了一个Python版的DataXServer服务，Restful接口，实现DataX远程调用
+6. 其他诸多细节优化，使用更方便
 
 # DataX
 
@@ -17,14 +24,6 @@ DataX本身作为数据同步框架，将不同数据源的同步抽象为从源
 # DataX详细介绍
 
 ##### 请参考：[DataX-Introduction](https://github.com/alibaba/DataX/blob/master/introduction.md)
-
-
-
-# Quick Start
-
-##### Download [DataX下载地址](http://datax-opensource.oss-cn-hangzhou.aliyuncs.com/datax.tar.gz)
-
-##### 请点击：[Quick Start](https://github.com/alibaba/DataX/blob/master/userGuid.md)
 
 
 
@@ -71,44 +70,6 @@ DataX目前已经有了比较全面的插件体系，主流的RDBMS数据库、N
 # License
 
 This software is free to use under the Apache License [Apache license](https://github.com/alibaba/DataX/blob/master/license.txt).
-
-# 
-请及时提出issue给我们。请前往：[DataxIssue](https://github.com/alibaba/DataX/issues)
-
-# 开源版DataX企业用户
-
-
-
-```
-长期招聘 联系邮箱：datax@alibabacloud.com
-【JAVA开发职位】
-职位名称：JAVA资深开发工程师/专家/高级专家
-工作年限 : 2年以上
-学历要求 : 本科（如果能力靠谱，这些都不是条件）
-期望层级 : P6/P7/P8
-
-岗位描述：
-    1. 负责阿里云大数据平台（数加）的开发设计。 
-    2. 负责面向政企客户的大数据相关产品开发；
-    3. 利用大规模机器学习算法挖掘数据之间的联系，探索数据挖掘技术在实际场景中的产品应用 ；
-    4. 一站式大数据开发平台
-    5. 大数据任务调度引擎
-    6. 任务执行引擎
-    7. 任务监控告警
-    8. 海量异构数据同步
-
-岗位要求：
-    1. 拥有3年以上JAVA Web开发经验；
-    2. 熟悉Java的基础技术体系。包括JVM、类装载、线程、并发、IO资源管理、网络；
-    3. 熟练使用常用Java技术框架、对新技术框架有敏锐感知能力；深刻理解面向对象、设计原则、封装抽象；
-    4. 熟悉HTML/HTML5和JavaScript；熟悉SQL语言；
-    5. 执行力强，具有优秀的团队合作精神、敬业精神；
-    6. 深刻理解设计模式及应用场景者加分；
-    7. 具有较强的问题分析和处理能力、比较强的动手能力，对技术有强烈追求者优先考虑；
-    8. 对高并发、高稳定可用性、高性能、大数据处理有过实际项目及产品经验者优先考虑；
-    9. 有大数据产品、云产品、中间件技术解决方案者优先考虑。
-````
-钉钉用户群：23169395
 
 
 
