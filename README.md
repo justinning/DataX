@@ -1,4 +1,4 @@
-![Datax-logo](https://github.com/justinning/DataX/blob/master/images/DataX-logo.png)
+
 
 # DataX 增强版
 与DataX 主干代码保持同步更新。在DataX的基础上，增加了若干新特性：
