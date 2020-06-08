@@ -143,6 +143,14 @@ ExcelReader实现了从本地文件读取数据并转为DataX协议的功能，�
 
 	* 默认值：全部按照string类型读取 <br />
 
+* **numericFormat**
+
+	* 描述：替换Excel表中的数字单元格的格式。例如使用"@" 可以去除千位分隔符、百分号等格式<br />
+
+ 	* 必选：否 <br />
+
+ 	* 默认值：无 <br />
+ 	
 * **sheetIndexs**
 
 	* 描述：需要读取的sheet页索引数组，从1开始。<br />
@@ -183,6 +191,7 @@ ExcelReader实现了从本地文件读取数据并转为DataX协议的功能，�
 
  	* 默认值：false <br />
 
+ 	
 ### 3.3 类型转换
 
 本地文件本身不提供数据类型，该类型是DataX ExcelReader定义：

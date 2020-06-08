@@ -1,6 +1,7 @@
 package com.alibaba.datax.plugin.unstructuredstorage.reader;
 
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -29,6 +30,8 @@ import org.apache.poi.hssf.record.StringRecord;
 import org.apache.poi.hssf.usermodel.HSSFDataFormatter;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
+import org.apache.poi.ss.formula.ptg.Ptg;
+import org.apache.poi.ss.usermodel.BuiltinFormats;
 
 /**
  * @desc 代码基于 https://github.com/SwordfallYeung/POIExcel 修改
@@ -119,15 +122,16 @@ public class Excel2003Parser implements HSSFListener {
 	private String readSheetsRegex = null;
 	private String[] usecols = null;
 	private boolean includeHeader = false;
-	
+	private String numericFormat = null;
 
 
 	/**
 	 * 遍历excel下所有的sheet
+	 * @param numericFormat TODO
 	 * @throws Exception
 	 */
 	public List<String[]> process(InputStream inputStream, int headerLine, String[] usecols, int[] sheetsIndex,
-			String sheetsRegex, boolean skipHeader) throws Exception {
+			String sheetsRegex, boolean skipHeader, String numericFormat) throws Exception {
 		
 		readSheetsIndex = sheetsIndex;
 		readSheetsRegex = sheetsRegex;
@@ -135,7 +139,8 @@ public class Excel2003Parser implements HSSFListener {
 		this.headerLine = headerLine;
 		this.usecols = usecols;
 		this.includeHeader = !skipHeader;
-			
+		this.numericFormat = numericFormat;
+		
 		this.fs = new POIFSFileSystem(inputStream);
 		MissingRecordAwareHSSFListener listener = new MissingRecordAwareHSSFListener(this);
 		formatListener = new FormatTrackingHSSFListener(listener);
@@ -207,19 +212,25 @@ public class Excel2003Parser implements HSSFListener {
 			FormulaRecord frec = (FormulaRecord) record;
 			thisRow = frec.getRow();
 			thisColumn = frec.getColumn();
+			double doubleValue = frec.getValue();
 			if (outputFormulaValues) {
-				if (Double.isNaN(frec.getValue())) {
+				if (Double.isNaN(doubleValue) || doubleValue == 0.0 ) {
 					outputNextStringRecord = true;
 					nextRow = frec.getRow();
 					nextColumn = frec.getColumn();
+					//直接返回，下次会进入StringRecord.sid处理包含字符串的公式
+					return;
 				} else {
-					thisStr = '"' + HSSFFormulaParser.toFormulaString(stubWorkbook, frec.getParsedExpression()) + '"';
+					int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
+					thisStr = this.formatter.formatRawCellContents(doubleValue, fmtIndex, numericFormat);
 				}
 			} else {
-				thisStr = '"' + HSSFFormulaParser.toFormulaString(stubWorkbook, frec.getParsedExpression()) + '"';
+				thisStr = '"' + HSSFFormulaParser.toFormulaString(stubWorkbook, frec.getParsedExpression()) + '"';				
 			}
+			
 			cellList.add(thisColumn, thisStr);
 			checkRowIsNull(thisStr); // 如果里面某个单元格含有值，则标识该行不为空行
+			
 			break;
 		case StringRecord.sid: // 单元格中公式的字符串
 			if (outputNextStringRecord) {
@@ -228,6 +239,8 @@ public class Excel2003Parser implements HSSFListener {
 				thisRow = nextRow;
 				thisColumn = nextColumn;
 				outputNextStringRecord = false;
+				cellList.add(thisColumn, thisStr);
+				checkRowIsNull(thisStr); // 如果里面某个单元格含有值，则标识该行不为空行
 			}
 			break;
 		case LabelRecord.sid:
@@ -263,10 +276,22 @@ public class Excel2003Parser implements HSSFListener {
 					|| formatString.contains("yyyy/m/d")) {
 				formatString = "yyyy-MM-dd hh:mm:ss";
 			}
-			int formatIndex = formatListener.getFormatIndex(numrec);
-			value = formatter.formatRawCellContents(valueDouble, formatIndex, formatString).trim();
-
-			value = value.equals("") ? "" : value;
+			
+			if ("yyyy-MM-dd hh:mm:ss".equals(formatString) || numericFormat == null) {
+				int formatIndex = formatListener.getFormatIndex(numrec);
+				value = formatter.formatRawCellContents(valueDouble, formatIndex, formatString).trim();
+				value = value.equals("") ? "" : value;
+			} else {
+				//使用替代数字格式
+				int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
+				value = formatter.formatRawCellContents(valueDouble, fmtIndex, numericFormat);
+				if(value.contains("E")) {
+					//不使用科学计数法
+					BigDecimal bd = new BigDecimal(value);
+					value = bd.toPlainString();
+				}
+			}
+			
 			// 向容器加入列值
 			cellList.add(thisColumn, value);
 			checkRowIsNull(value); // 如果里面某个单元格含有值，则标识该行不为空行

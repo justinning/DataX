@@ -3,8 +3,6 @@ package com.alibaba.datax.plugin.unstructuredstorage.reader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -13,32 +11,22 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Properties;
 import java.util.TimeZone;
 
-import com.alibaba.fastjson.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * 
- * @see CREATE TABLE SCRIPT
- * CREATE TABLE datax_file_status(
- *    id VARCHAR(50) PRIMARY KEY,
- *    host VARCHAR(50) NOT NULL, 
- *    path VARCHAR(512) NOT NULL, 
- *    last_modified VARCHAR(20) NOT NULL );
- */
 public class FileStatusManage {
-
-	private static String JDBC_URL = "jdbc:h2:file:./h2DB";
-	private static String DRIVER_CLASS = "org.h2.Driver";
-	private static String USER = "root";
-	private static String PASSWORD = "root";
-
+	private static final Logger LOG = LoggerFactory.getLogger(FileStatusManage.class);
+	private String JDBC_URL;
+	private String DRIVER_CLASS;
+	private String USER;
+	private String PASSWORD;
+	private boolean bDbReady = false;
 	private final String TABLE_NAME = "datax_file_status";
-	
+
 	public FileStatusManage() {
 		String dataxHome = System.getProperty("datax.home");
 
@@ -47,18 +35,23 @@ public class FileStatusManage {
 			try {
 				String propFile = dataxHome + File.separatorChar + "conf" + File.separatorChar + "ext.conf";
 				prop.load(new FileInputStream(propFile));
-				JDBC_URL = prop.getProperty("ext.jdbcUrl", JDBC_URL);
-				DRIVER_CLASS = prop.getProperty("ext.driverClass", DRIVER_CLASS);
-				USER = prop.getProperty("ext.userName", USER);
-				PASSWORD = prop.getProperty("ext.password", PASSWORD);
+				JDBC_URL = prop.getProperty("ext.jdbcUrl");
+				DRIVER_CLASS = prop.getProperty("ext.driverClass");
+				USER = prop.getProperty("ext.userName");
+				PASSWORD = prop.getProperty("ext.password");
 			} catch (IOException e) {
 			}
+		}
+
+		if (JDBC_URL == null || DRIVER_CLASS == null || USER == null || PASSWORD == null) {
+			LOG.error("状态数据库JDBC信息不完整，请检查！");
+			return;
 		}
 
 		try {
 			Class.forName(DRIVER_CLASS);
 		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
+			LOG.error(String.format("JDBC驱动没找到 [ %s ]", DRIVER_CLASS));
 		}
 
 		try {
@@ -77,64 +70,71 @@ public class FileStatusManage {
 			statement.close();
 			conn.close();
 		} catch (SQLException e) {
-			e.printStackTrace();
+			LOG.error(e.getMessage());
 		}
-
 	}
 
 	public boolean isNewFile(String host, FileInfo info, String readMode) {
-		if (Constant.READ_FULL.equals(readMode)) {
+		if (Constant.READ_FULL.equals(readMode) || !bDbReady) {
 			return true;
 		}
-		
+
 		boolean result = true;
-		
+
 		try {
 			Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
 			Statement statement = conn.createStatement();
 			String strTime = formatTimeString(info.getLastModified(), null);
-			String id = md5(host + info.getPath());
+			// host和路径转成小写，让路径不区分大小写
+			String id = md5(host.toLowerCase() + info.getPath().toLowerCase());
 			String strSql = String.format("SELECT last_modified FROM %s WHERE id='%s'", TABLE_NAME, id);
 			ResultSet rs = statement.executeQuery(strSql);
 			if (rs.first()) {
-				
+
 				if (Constant.READ_DIFFERENT.equals(readMode) && strTime.equals(rs.getString("last_modified"))) {
 					result = false;
-				} else if (Constant.READ_LATEST.equals(readMode) && strTime.compareTo(rs.getString("last_modified")) <=0 ){
+				} else if (Constant.READ_LATEST.equals(readMode)
+						&& strTime.compareTo(rs.getString("last_modified")) <= 0) {
 					result = false;
 				}
 			}
 			statement.close();
 			conn.close();
 		} catch (SQLException e) {
-			e.printStackTrace();
+			LOG.error(e.getMessage());
 		}
 		return result;
 	}
 
 	public void updateStatus(String host, FileInfo info) {
+		if (!bDbReady) {
+			return;
+		}
+
 		try {
 			Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
 			Statement statement = conn.createStatement();
-			System.out.println(info.getPath()+","+ info.getLastModified());
+
 			String strTime = formatTimeString(info.getLastModified(), null);
-			String id = md5(host + info.getPath());
+			// host和路径转成小写，让路径不区分大小写
+			String id = md5(host.toLowerCase() + info.getPath().toLowerCase());
 			String strSql = String.format("SELECT last_modified FROM %s WHERE id='%s'", TABLE_NAME, id);
 			ResultSet rs = statement.executeQuery(strSql);
 			if (rs.first()) {
-				strSql = String.format("UPDATE %s set last_modified='%s' WHERE id='%s'", TABLE_NAME,strTime,id);				
+				strSql = String.format("UPDATE %s set last_modified='%s' WHERE id='%s'", TABLE_NAME, strTime, id);
 			} else {
 				strSql = String.format("INSERT INTO %s (id,host,path,last_modified) values('%s','%s','%s','%s')",
-						TABLE_NAME,id,host,info.getPath(),strTime);
+						TABLE_NAME, id, host, info.getPath(), strTime);
 			}
 			statement.executeUpdate(strSql);
 			statement.close();
 			conn.close();
-			
+
 		} catch (SQLException e) {
-			e.printStackTrace();
+			LOG.error(e.getMessage());
 		}
 	}
+
 	/**
 	 * TimeZone.getTimeZone("GMT+:08:00")
 	 */
@@ -160,36 +160,8 @@ public class FileStatusManage {
 				sb.append(Integer.toHexString(tempInt));
 			}
 		} catch (Exception e) {
-			System.out.println(e.getMessage());
+			LOG.error(e.getMessage());
 		}
 		return sb.toString();
 	}
-
-	public static void main(String[] args) {
-		
-		List<FileInfo> ls = new ArrayList<FileInfo>();
-		
-		FileStatusManage fs = new FileStatusManage();
-		
-		String filepath = "/Users/justin/Documents/Galaxeed/工作目录/数据样本/2020/2020.4月/20200412/ERP/erp-test.csv";
-		long lastModifiedTime = new File(filepath).lastModified();
-		try {
-			InetAddress addr = InetAddress.getLocalHost();
-			String host = addr.getHostName();
-			FileInfo info = new FileInfo(filepath,lastModifiedTime);
-			
-			ls.add(info);
-			String str = JSONObject.toJSONString(ls);
-			List ls2 = (List) JSONObject.parseArray(str,FileInfo.class);
-			for(Object o : ls2) {
-				System.out.println(((FileInfo)o).getPath());
-			}
-			if(fs.isNewFile(host,info, null)) {
-				fs.updateStatus(host, info);
-			}
-		} catch (UnknownHostException e) {
-		}
-
-	}
-
 }

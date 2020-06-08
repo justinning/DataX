@@ -438,6 +438,7 @@ public class UnstructuredStorageReaderUtil {
 
 		// warn: no default value '\N'
 		String nullFormat = readerSliceConfig.getString(Key.NULL_FORMAT);
+		String numericFormat = readerSliceConfig.getString(Key.NUMERIC_FORMAT);
 		
 		// column null,["*"]及["columnName",...] 三种情况均返回null，配置为JSON格式时返回非null
 		List<ColumnEntry> column = UnstructuredStorageReaderUtil.getListColumnEntry(readerSliceConfig,Key.COLUMN);
@@ -477,7 +478,7 @@ public class UnstructuredStorageReaderUtil {
 					usecols,
 					readerSliceConfig.getList(Key.SHEET_INDEXS),
 					readerSliceConfig.getString(Key.SHEET_NAMES,null),
-					readerSliceConfig.getBool(Key.SKIP_HEADER,true));
+					readerSliceConfig.getBool(Key.SKIP_HEADER,true), numericFormat);
 			
 			int rowNum = 0;
 			

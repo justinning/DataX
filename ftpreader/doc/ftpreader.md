@@ -195,10 +195,8 @@ FtpReader实现了从远程FTP文件读取数据并转为DataX协议的功能，
 
 * **readMode**
 
-	* 描述：文件读取模式，支持三种模式：full,different,lastest
-	    full 表示读取全部
-	    different 只读取与状态数据库中记录的时间戳不同的文件
-	    latest 只读取比状态数据库中记录的时间戳更新的文件 <br />
+	* 描述：文件读取模式，支持三种模式：full,different,lastest。其中full - 表示读取全部；different - 只读取与状态数据库中记录的时间戳不同的文件；latest 只读取比状态
+	数据库中记录的时间戳更新的文件 <br />
 
 	* 必选：否 <br />
 
@@ -277,6 +275,14 @@ FtpReader实现了从远程FTP文件读取数据并转为DataX协议的功能，
  	* 默认值：false <br />
  	
 Excel文件配置参数:
+* **numericFormat**
+
+	* 描述：替换Excel表中的数字单元格的格式。例如使用"@" 可以去除千位分隔符、百分号等格式<br />
+
+ 	* 必选：否 <br />
+
+ 	* 默认值：无 <br /> 	
+ 	
 * **sheetIndexs**
 
 	* 描述：需要读取的sheet页索引数组，从1开始(仅限Excel文件)。<br />

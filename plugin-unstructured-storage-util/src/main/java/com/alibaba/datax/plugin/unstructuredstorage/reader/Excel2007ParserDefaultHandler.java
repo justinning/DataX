@@ -1,6 +1,7 @@
 package com.alibaba.datax.plugin.unstructuredstorage.reader;
 
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -127,7 +128,7 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 	private int[] headerIndexs = null;
 	private String readSheetsRegex = null;
 	private boolean includeHeader = false;
-
+	private String numericFormat = null;
 	/**
 	 * 单元格
 	 */
@@ -137,10 +138,11 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 	 * 遍历工作簿中所有的电子表格 并缓存在mySheetList中
 	 * @param inputStream TODO
 	 * @param usecols TODO
+	 * @param numericFormat TODO
 	 * @throws Exception
 	 */
 	public List<String[]> process(InputStream inputStream, int headerLine, String[] usecols, int[] sheetsIndex,
-			String sheetsRegex, boolean skipHeader) throws Exception {
+			String sheetsRegex, boolean skipHeader, String numericFormat) throws Exception {
 	
 		readSheetsIndex = sheetsIndex;
 		readSheetsRegex = sheetsRegex;
@@ -148,7 +150,7 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 		this.headerLine = headerLine;
 		this.usecols = usecols;
 		this.includeHeader = !skipHeader;
-
+		this.numericFormat = numericFormat;
 
 		OPCPackage pkg = OPCPackage.open(inputStream);
 		XSSFReader xssfReader = new XSSFReader(pkg);
@@ -434,7 +436,17 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 			}
 			break;
 		case NUMBER: // 数字
-			if (formatString != null) {
+			
+			//优先使用替代数字格式
+			if(numericFormat != null) {
+				int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
+				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), fmtIndex, numericFormat);
+				if(thisStr.contains("E")) {
+					//不使用科学计数法
+					BigDecimal bd = new BigDecimal(thisStr);
+					thisStr = bd.toPlainString();
+				}
+			} else if (formatString != null) {
 				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString).trim();
 			} else {
 				thisStr = value;
