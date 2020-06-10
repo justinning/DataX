@@ -137,19 +137,22 @@ public class FtpReader extends Reader {
 			// full,different,latest
 			String readMode = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.READ_MODE, 
 				com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL);
-			
+			String serverId = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILESERVER_ID,"");
 			String fileNameFilter = this.originConfig.getString(Key.PATH_FILTER);
 			
 			if( fileNameFilter == null || "".equals(fileNameFilter)){
 				for(FileInfo file: files) {
-					if(statusManage.isNewFile(this.host, file, readMode))
+					if(statusManage.isNewFile(serverId, file, readMode)) {
 						this.sourceFiles.add(file);
-				}				
+					}
+				}
 			}else {
 				Pattern pat = Pattern.compile(fileNameFilter);				
 				for(FileInfo file: files) {
-					if(pat.matcher(file.getPath()).matches() && statusManage.isNewFile(this.host, file, readMode))
+					if(pat.matcher(file.getPath()).matches() 
+							&& statusManage.isNewFile(serverId, file, readMode)) {
 						this.sourceFiles.add(file);
+					}
 				}
 			}
 			LOG.info(String.format("您即将读取的文件数为: [%s]", this.sourceFiles.size()));
@@ -351,10 +354,11 @@ public class FtpReader extends Reader {
 					com.alibaba.datax.plugin.unstructuredstorage.reader.Key.READ_MODE,
 					com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL);
 			
-			
 			if (!readMode.equals(com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL)) {
+				String fileServerId = this.readerSliceConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILESERVER_ID,"");
+				
 				for (FileInfo f : sourceFiles) {
-					statusManage.updateStatus(this.host, f);
+					statusManage.updateStatus(fileServerId, f);
 				}
 			}
 			LOG.debug("end read source files...");

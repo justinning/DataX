@@ -43,5 +43,7 @@ public class Key {
 	
 	public static final String READ_MODE = "readMode";
 	
+	public static final String FILESERVER_ID = "fileServerId";
+	
 	public static final String NUMERIC_FORMAT = "numericFormat";
 }

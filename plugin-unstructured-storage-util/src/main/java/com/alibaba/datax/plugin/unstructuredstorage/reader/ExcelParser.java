@@ -5,11 +5,14 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.alibaba.datax.plugin.unstructuredstorage.reader.excel.HSSFEventParser;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.excel.XSSFEventParser;
+
 /**
  * 
  * @author justin 代码基于 https://github.com/SwordfallYeung/POIExcel 修改
  */
-public class ExcelParserHelper {
+public class ExcelParser {
 
 	/**
 	 * 
@@ -53,11 +56,11 @@ public class ExcelParserHelper {
 			}
 		}
 		if (format == FileFormat.EXCEL2007) {
-			Excel2007ParserDefaultHandler parser = new Excel2007ParserDefaultHandler();
+			XSSFEventParser parser = new XSSFEventParser();
 			return parser.process(inputStream, headerLine, usecols, indexs, sheetsRegex, skipHeader, numericFormat);
 
 		} else if (format == FileFormat.EXCEL2003) {
-			Excel2003Parser parser = new Excel2003Parser();
+			HSSFEventParser parser = new HSSFEventParser();
 			return parser.process(inputStream, headerLine, usecols, indexs, sheetsRegex, skipHeader, numericFormat);
 		}
 		else {

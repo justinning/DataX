@@ -1,4 +1,4 @@
-package com.alibaba.datax.plugin.unstructuredstorage.reader;
+package com.alibaba.datax.plugin.unstructuredstorage.reader.excel;
 
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -15,6 +15,8 @@ import org.apache.poi.xssf.model.SharedStringsTable;
 import org.apache.poi.xssf.model.StylesTable;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFRichTextString;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -25,8 +27,13 @@ import org.xml.sax.helpers.XMLReaderFactory;
 /**
  * @desc 代码基于 https://github.com/SwordfallYeung/POIExcel 修改
  *       采用SAX事件驱动模式解决XLSX文件，可以有效解决用户模式内存溢出的问题，它会自动忽略空行以节省内存
+ *       
+ *       增加：
+ *       1、错误公式按空值处理
+ *       2、可按传入的格式重设数值型单元格样式(如果单元格是文本型，则不起作用)
+ *       3、完善日期格式化，包含文本格式的日期内容及日期格式的字符串
  **/
-public class Excel2007ParserDefaultHandler extends DefaultHandler {
+public class XSSFEventParser extends DefaultHandler {
 
 	/**
 	 * 单元格中的数据可能的数据类型
@@ -65,7 +72,7 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 	/**
 	 * 一行内cell集合
 	 */
-	private List<String> cellList = new ArrayList<String>();
+	private List<String> cellList = new RowCells<>();
 
 	/**
 	 * 判断整行是否为空行的标记
@@ -134,6 +141,9 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 	 */
 	private StylesTable stylesTable;
 
+	private final String NORMAL_DATE_FORMAT = "yyyy-MM-dd hh:mm:ss";
+	private static final Logger LOG = LoggerFactory.getLogger(XSSFEventParser.class);
+	
 	/**
 	 * 遍历工作簿中所有的电子表格 并缓存在mySheetList中
 	 * @param inputStream TODO
@@ -162,16 +172,15 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 		XSSFReader.SheetIterator sheets = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
 		while (sheets.hasNext()) { // 遍历sheet
 
-			sheetIndex++;
 			InputStream sheet = sheets.next(); // sheets.next()和sheets.getSheetName()不能换位置，否则sheetName报错
 			sheetName = sheets.getSheetName();
 
-			if (isReadSheet(sheetIndex, sheetName)) {
+			if (isReadSheet(sheetIndex + 1, sheetName)) {
 				InputSource sheetSource = new InputSource(sheet);
 				parser.parse(sheetSource); // 解析excel的每条记录，在这个过程中startElement()、characters()、endElement()这三个函数会依次执行
 			}
-
 			sheet.close();
+			sheetIndex++;
 		}
 		return dataFrame;
 	}
@@ -296,8 +305,16 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 		} else {
 			// 如果标签名称为row，这说明已到行尾，调用optRows()方法
 			if ("row".equals(name)) {
-				// ref 为本行最后一个非空单元格的坐标
-				int curRow = Integer.parseInt(ref.replaceAll("[A-Z]+", ""));
+				String r = "-1";
+				
+				// ref不为null时为本行最后一个非空单元格的坐标，如果B1
+				if( ref != null) {
+					r = ref.replaceAll("[A-Z]+", "");
+				}else {
+					//本行是空行
+					notEmptyLine = false;
+				}
+				int curRow = Integer.parseInt(r);
 
 				if (curRow == headerLine) {
 					totalColumns = cellList.size(); // 获取列数
@@ -379,16 +396,17 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 			int styleIndex = Integer.parseInt(cellStyleStr);
 			XSSFCellStyle style = stylesTable.getStyleAt(styleIndex);
 			formatIndex = style.getDataFormat();
+			
 			formatString = style.getDataFormatString();
-			if (formatString.contains("m/d/yyyy") || formatString.contains("yyyy/mm/dd")
-					|| formatString.contains("yyyy/m/d")) {
-				nextDataType = CellDataType.DATE;
-				formatString = "yyyy-MM-dd hh:mm:ss";
-			}
-
+	
 			if (formatString == null) {
 				nextDataType = CellDataType.NULL;
 				formatString = BuiltinFormats.getBuiltinFormat(formatIndex);
+			} else {				
+				if (isDateFormat(formatString)) {
+					nextDataType = CellDataType.DATE;
+					formatString = NORMAL_DATE_FORMAT ;
+				}
 			}
 		}
 	}
@@ -411,7 +429,9 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 			thisStr = first == '0' ? "FALSE" : "TRUE";
 			break;
 		case ERROR: // 错误
-			thisStr = "\"ERROR:" + value.toString() + '"';
+			//thisStr = "\"ERROR:" + value.toString() + '"';
+			//错误单元格包含类似的信息：ERROR:#DIV/0!，按空值处理
+			thisStr = "";
 			break;
 		case FORMULA: // 公式
 			thisStr = '"' + value.toString() + '"';
@@ -422,23 +442,14 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 			rtsi = null;
 			break;
 		case SSTINDEX: // 字符串
-			String sstIndex = value.toString();
-			try {
-				int idx = Integer.parseInt(sstIndex);
-				XSSFRichTextString rtss = new XSSFRichTextString(sst.getEntryAt(idx));// 根据idx索引值获取内容值
-				thisStr = rtss.toString();
-				// System.out.println(thisStr);
-				// 有些字符串是文本格式的，但内容却是日期
-
-				rtss = null;
-			} catch (NumberFormatException ex) {
-				thisStr = value.toString();
-			}
+			thisStr = queryStringByIndex(value);
 			break;
 		case NUMBER: // 数字
 			
-			//优先使用替代数字格式
-			if(numericFormat != null) {
+			if(formatString != null && (NORMAL_DATE_FORMAT.equals(formatString) || numericFormat == null)) {
+				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString).trim();
+			} else if (numericFormat != null) {
+				//使用替代数字格式
 				int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
 				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), fmtIndex, numericFormat);
 				if(thisStr.contains("E")) {
@@ -446,21 +457,44 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 					BigDecimal bd = new BigDecimal(thisStr);
 					thisStr = bd.toPlainString();
 				}
-			} else if (formatString != null) {
-				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString).trim();
 			} else {
 				thisStr = value;
 			}
 			thisStr = thisStr.replace("_", "").trim();
 			break;
 		case DATE: // 日期
+			
 			thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
 			// 对日期字符串作特殊处理，去掉T
 			thisStr = thisStr.replace("T", " ");
+			
+			// TODO: 如果内容非日期但设置的是日期格式，需要按字符串处理，无法准确识别，暂用日期比较模糊判断
+			// 在Excel2003解析中没这个问题
+			if( thisStr.compareTo("1920-01-01 00:00:00") < 0 ) {				
+				thisStr = queryStringByIndex(value);
+			}
 			break;
 		default:
 			thisStr = " ";
 			break;
+		}
+		return thisStr;
+	}
+
+	private String queryStringByIndex(String sstIndex) {
+
+		String thisStr;
+		
+		try {
+			int idx = Integer.parseInt(sstIndex);
+			XSSFRichTextString rtss = new XSSFRichTextString(sst.getEntryAt(idx));// 根据idx索引值获取内容值
+			thisStr = rtss.toString();
+			// System.out.println(thisStr);
+			// 有些字符串是文本格式的，但内容却是日期
+
+			rtss = null;
+		} catch (NumberFormatException ex) {
+			thisStr = sstIndex;
 		}
 		return thisStr;
 	}
@@ -517,5 +551,19 @@ public class Excel2007ParserDefaultHandler extends DefaultHandler {
 		}
 
 		return true;
+	}
+	
+	private boolean isDateFormat(String formatString) {
+		if (formatString != null) {
+			formatString = formatString.replace("\\", "/");
+			formatString = formatString.replace("-", "/");
+			formatString = formatString.replace("//", "/");
+			
+			if (formatString.contains("m/d/yy") || formatString.contains("yy/mm/dd")
+					|| formatString.contains("yy/m/d") || formatString.contains("dd/mmm/yy")) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

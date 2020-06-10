@@ -64,9 +64,11 @@ public class FileStatusManage {
 			} catch (SQLException e) {
 				// 表不存在，创建表
 				statement.execute(String.format(
-						"CREATE TABLE %s(id VARCHAR(50) PRIMARY KEY, host VARCHAR(50) NOT NULL, path VARCHAR(512) NOT NULL, last_modified VARCHAR(20) NOT NULL)",
+						"CREATE TABLE %s(id VARCHAR(50) PRIMARY KEY, fileserver_id VARCHAR(50) NOT NULL, path VARCHAR(512) NOT NULL, last_modified VARCHAR(20) NOT NULL, update_time datetime NOT NULL)",
 						TABLE_NAME));
 			}
+			
+			bDbReady = true;
 			statement.close();
 			conn.close();
 		} catch (SQLException e) {
@@ -74,19 +76,20 @@ public class FileStatusManage {
 		}
 	}
 
-	public boolean isNewFile(String host, FileInfo info, String readMode) {
+	public boolean isNewFile(String fileserver_id, FileInfo info, String readMode) {
 		if (Constant.READ_FULL.equals(readMode) || !bDbReady) {
 			return true;
 		}
 
 		boolean result = true;
-
+		String id = md5(fileserver_id.toLowerCase() + info.getPath().toLowerCase());
+		String strTime = formatTimeString(info.getLastModified(), null);
+		
 		try {
 			Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
 			Statement statement = conn.createStatement();
-			String strTime = formatTimeString(info.getLastModified(), null);
 			// host和路径转成小写，让路径不区分大小写
-			String id = md5(host.toLowerCase() + info.getPath().toLowerCase());
+
 			String strSql = String.format("SELECT last_modified FROM %s WHERE id='%s'", TABLE_NAME, id);
 			ResultSet rs = statement.executeQuery(strSql);
 			if (rs.first()) {
@@ -103,10 +106,12 @@ public class FileStatusManage {
 		} catch (SQLException e) {
 			LOG.error(e.getMessage());
 		}
+		LOG.info(String.format("新文件判断 id=%s,serverId=%s,path=%s,last_modified=%s,result=%b", 
+				id,fileserver_id.toLowerCase(),info.getPath().toLowerCase(),strTime,result));
 		return result;
 	}
 
-	public void updateStatus(String host, FileInfo info) {
+	public void updateStatus(String fileserver_id, FileInfo info) {
 		if (!bDbReady) {
 			return;
 		}
@@ -117,19 +122,22 @@ public class FileStatusManage {
 
 			String strTime = formatTimeString(info.getLastModified(), null);
 			// host和路径转成小写，让路径不区分大小写
-			String id = md5(host.toLowerCase() + info.getPath().toLowerCase());
+			String id = md5(fileserver_id.toLowerCase() + info.getPath().toLowerCase());
 			String strSql = String.format("SELECT last_modified FROM %s WHERE id='%s'", TABLE_NAME, id);
 			ResultSet rs = statement.executeQuery(strSql);
+			String nowTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+			
 			if (rs.first()) {
-				strSql = String.format("UPDATE %s set last_modified='%s' WHERE id='%s'", TABLE_NAME, strTime, id);
+				strSql = String.format("UPDATE %s set last_modified='%s',update_time='%s' WHERE id='%s'", TABLE_NAME, strTime,nowTime, id);
 			} else {
-				strSql = String.format("INSERT INTO %s (id,host,path,last_modified) values('%s','%s','%s','%s')",
-						TABLE_NAME, id, host, info.getPath(), strTime);
+				strSql = String.format("INSERT INTO %s (id,fileserver_id,path,last_modified,update_time) values('%s','%s','%s','%s','%s')",
+						TABLE_NAME, id, fileserver_id, info.getPath(), strTime,nowTime);
 			}
 			statement.executeUpdate(strSql);
 			statement.close();
 			conn.close();
-
+			LOG.info(String.format("更新文件记录 id=%s,serverId=%s,path=%s,last_modified=%s", 
+					id,fileserver_id.toLowerCase(),info.getPath().toLowerCase(),strTime));
 		} catch (SQLException e) {
 			LOG.error(e.getMessage());
 		}

@@ -470,24 +470,22 @@ public class UnstructuredStorageReaderUtil {
 					column.add(c);
 				}
 			}
+			int headerLine = readerSliceConfig.getInt(Key.HEADERLINE,1);
 			
 			//大文件需要较大内存, 200m文件 大约-Xms4096m -Xmx4096m 
-			List<String[]> dataFrame = ExcelParserHelper.parse(inputStream,
+			List<String[]> dataFrame = ExcelParser.parse(inputStream,
 					format,
-					readerSliceConfig.getInt(Key.HEADERLINE,1),
+					headerLine,
 					usecols,
 					readerSliceConfig.getList(Key.SHEET_INDEXS),
 					readerSliceConfig.getString(Key.SHEET_NAMES,null),
-					readerSliceConfig.getBool(Key.SKIP_HEADER,true), numericFormat);
+					skipHeader, numericFormat);
 			
 			int rowNum = 0;
 			
 			for (String[] parseRows : dataFrame) {
 				rowNum++;
-				
-				if( skipHeader && rowNum == 1)
-					continue;
-				
+								
 				String[] newRows;
 				
 				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
@@ -502,7 +500,7 @@ public class UnstructuredStorageReaderUtil {
 						
 					}else {
 						newRows[parseRows.length] = context;  //filepath
-						newRows[parseRows.length + 1 ] = String.valueOf(rowNum);
+						newRows[parseRows.length + 1 ] = String.valueOf(headerLine + rowNum - (skipHeader ? 0:1) );
 					}
 				}else {
 									
