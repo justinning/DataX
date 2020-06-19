@@ -10,6 +10,7 @@ import com.google.common.collect.Sets;
 
 import org.apache.commons.io.Charsets;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.input.BOMInputStream;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -372,7 +373,8 @@ public class TxtFileReader extends Reader {
 				LOG.info(String.format("reading file : [%s]", fileName));
 				InputStream inputStream;
 				try {
-					inputStream = new FileInputStream(fileName);
+					//使用BOMInputStream 去除UTF-8 with BOM头三个标记字节
+					inputStream = new BOMInputStream(new FileInputStream(fileName));
 					UnstructuredStorageReaderUtil.readFromStream(inputStream,
 							fileName, this.readerSliceConfig, recordSender,
 							this.getTaskPluginCollector());

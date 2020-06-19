@@ -279,8 +279,8 @@ public class ExcelReader extends Reader {
 						fmt = FileFormat.EXCEL2007;
 					}
 					
-					UnstructuredStorageReaderUtil.readFromExcel(new FileInputStream(fileName), fmt, this.readerSliceConfig, 
-							fileName, recordSender, this.getTaskPluginCollector());
+					UnstructuredStorageReaderUtil.readFromExcel(new FileInputStream(fileName), fmt, fileName, 
+							this.readerSliceConfig, recordSender, this.getTaskPluginCollector());
 					recordSender.flush();
 
 				} catch (Exception e) {

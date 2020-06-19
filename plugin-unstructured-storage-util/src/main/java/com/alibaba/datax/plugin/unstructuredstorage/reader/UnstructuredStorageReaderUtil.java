@@ -281,7 +281,7 @@ public class UnstructuredStorageReaderUtil {
 				Constant.DEFAULT_SKIP_HEADER);
 		// warn: no default value '\N'
 		String nullFormat = readerSliceConfig.getString(Key.NULL_FORMAT);
-		
+		String delimsReplacement = readerSliceConfig.getString(Key.DELIMS_REPLACEMENT,null);
 		boolean fileAttrs = readerSliceConfig.getBool(Key.READ_FILE_ATTRS,false);
 		// Identify whether the first line is found.
 		
@@ -304,7 +304,6 @@ public class UnstructuredStorageReaderUtil {
 					usecols[i] = cl.get(i).toString();
 			}
 		}
-		
 		
 		String splitLine = readerSliceConfig.getString(Key.FILE_SPLIT_LINE,"");
 		boolean isBeforeSplitLine = readerSliceConfig.getBool(Key.BEFORE_SPLIT_LINE,true);
@@ -381,7 +380,12 @@ public class UnstructuredStorageReaderUtil {
 						}
 					}
 				}
-				
+				//替换特殊分隔符\n,\r,\01
+				if(parseRow != null && delimsReplacement != null) {
+					for(int n= 0; n <parseRow.length; n++) {
+						parseRow[n] = (parseRow[n]== null ? null : parseRow[n].replaceAll("\n|\r|\01", delimsReplacement));
+					}
+				}
 				String[] newRows;
 				
 				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
@@ -433,12 +437,13 @@ public class UnstructuredStorageReaderUtil {
 	}
 
 
-	public static void readFromExcel(InputStream inputStream, FileFormat format, Configuration readerSliceConfig,
-			String context, RecordSender recordSender, TaskPluginCollector taskPluginCollector) {
+	public static void readFromExcel(InputStream inputStream, FileFormat format, String context,
+			Configuration readerSliceConfig, RecordSender recordSender, TaskPluginCollector taskPluginCollector) {
 
 		// warn: no default value '\N'
 		String nullFormat = readerSliceConfig.getString(Key.NULL_FORMAT);
 		String numericFormat = readerSliceConfig.getString(Key.NUMERIC_FORMAT);
+		String delimsReplacement = readerSliceConfig.getString(Key.DELIMS_REPLACEMENT,null);
 		
 		// column null,["*"]及["columnName",...] 三种情况均返回null，配置为JSON格式时返回非null
 		List<ColumnEntry> column = UnstructuredStorageReaderUtil.getListColumnEntry(readerSliceConfig,Key.COLUMN);
@@ -483,30 +488,38 @@ public class UnstructuredStorageReaderUtil {
 			
 			int rowNum = 0;
 			
-			for (String[] parseRows : dataFrame) {
+			for (String[] parseRow : dataFrame) {
 				rowNum++;
-								
+
+				//替换换行符
+				//替换特殊分隔符\n,\r,\01
+				if(parseRow != null && delimsReplacement != null) {
+					for(int n= 0; n <parseRow.length; n++) {
+						parseRow[n] = (parseRow[n]== null ? null : parseRow[n].replaceAll("\n|\r|\01", delimsReplacement));
+					}
+				}
+				
 				String[] newRows;
 				
 				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
 				// Note: If it is a compressed file, the file line number of multiple records in the same file will be the same
 				if (fileAttrs) {
-					newRows = new String[ parseRows.length + 2];
-					System.arraycopy(parseRows, 0, newRows, 0, parseRows.length);
+					newRows = new String[ parseRow.length + 2];
+					System.arraycopy(parseRow, 0, newRows, 0, parseRow.length);
 					
 					if (rowNum == 1 && !skipHeader) {
-						newRows[parseRows.length] = Constant.FIELD_NAME_FILEPATH;
-						newRows[parseRows.length + 1 ] = Constant.FIELD_NAME_LINE;
+						newRows[parseRow.length] = Constant.FIELD_NAME_FILEPATH;
+						newRows[parseRow.length + 1 ] = Constant.FIELD_NAME_LINE;
 						
 					}else {
-						newRows[parseRows.length] = context;  //filepath
-						newRows[parseRows.length + 1 ] = String.valueOf(headerLine + rowNum - (skipHeader ? 0:1) );
+						newRows[parseRow.length] = context;  //filepath
+						newRows[parseRow.length + 1 ] = String.valueOf(headerLine + rowNum - (skipHeader ? 0:1) );
 					}
 				}else {
 									
-					newRows = parseRows;
+					newRows = parseRow;
 				}
-				
+
 				// every line logic
 				UnstructuredStorageReaderUtil.transportOneRecord(recordSender, column, newRows, nullFormat,
 						taskPluginCollector);

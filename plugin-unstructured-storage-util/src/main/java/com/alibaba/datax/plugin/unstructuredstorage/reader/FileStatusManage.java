@@ -93,8 +93,9 @@ public class FileStatusManage {
 			String strSql = String.format("SELECT last_modified FROM %s WHERE id='%s'", TABLE_NAME, id);
 			ResultSet rs = statement.executeQuery(strSql);
 			if (rs.first()) {
-
-				if (Constant.READ_DIFFERENT.equals(readMode) && strTime.equals(rs.getString("last_modified"))) {
+				if (Constant.READ_DIFFERENT_NAME.equals(readMode)) {
+					result = false;
+			    } else if (Constant.READ_DIFFERENT.equals(readMode) && strTime.equals(rs.getString("last_modified"))) {
 					result = false;
 				} else if (Constant.READ_LATEST.equals(readMode)
 						&& strTime.compareTo(rs.getString("last_modified")) <= 0) {

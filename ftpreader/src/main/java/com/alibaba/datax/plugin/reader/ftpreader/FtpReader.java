@@ -5,11 +5,13 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.regex.Pattern;
 
+import org.apache.commons.io.input.BOMInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,30 +134,40 @@ public class FtpReader extends Reader {
 		@Override
 		public void prepare() {
 			LOG.debug("prepare() begin...");
-			HashSet<FileInfo> files = ftpHelper.getAllFiles(path, 0, maxTraversalLevel);
-
-			// full,different,latest
-			String readMode = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.READ_MODE, 
-				com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL);
-			String serverId = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILESERVER_ID,"");
-			String fileNameFilter = this.originConfig.getString(Key.PATH_FILTER);
+			boolean ignorePathNotExist = this.originConfig.getBool(Key.IGNORE_PATH_NOT_EXIST,false);
 			
-			if( fileNameFilter == null || "".equals(fileNameFilter)){
-				for(FileInfo file: files) {
-					if(statusManage.isNewFile(serverId, file, readMode)) {
-						this.sourceFiles.add(file);
+			try {
+				HashSet<FileInfo> files = ftpHelper.getAllFiles(path, 0, maxTraversalLevel);
+	
+				// full,different,latest
+				String readMode = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.READ_MODE, 
+					com.alibaba.datax.plugin.unstructuredstorage.reader.Constant.READ_FULL);
+				String serverId = this.originConfig.getString(com.alibaba.datax.plugin.unstructuredstorage.reader.Key.FILESERVER_ID,"");
+				String fileNameFilter = this.originConfig.getString(Key.PATH_FILTER);
+				
+				if( fileNameFilter == null || "".equals(fileNameFilter)){
+					for(FileInfo file: files) {
+						if(statusManage.isNewFile(serverId, file, readMode)) {
+							this.sourceFiles.add(file);
+						}
+					}
+				}else {
+					Pattern pat = Pattern.compile(fileNameFilter);				
+					for(FileInfo file: files) {
+						if(pat.matcher(file.getPath()).matches() 
+								&& statusManage.isNewFile(serverId, file, readMode)) {
+							this.sourceFiles.add(file);
+						}
 					}
 				}
-			}else {
-				Pattern pat = Pattern.compile(fileNameFilter);				
-				for(FileInfo file: files) {
-					if(pat.matcher(file.getPath()).matches() 
-							&& statusManage.isNewFile(serverId, file, readMode)) {
-						this.sourceFiles.add(file);
-					}
-				}
+			}catch (DataXException e) {
+				if (e.getErrorCode() != FtpReaderErrorCode.FILE_NOT_EXISTS || !ignorePathNotExist)
+					throw e;
 			}
 			LOG.info(String.format("您即将读取的文件数为: [%s]", this.sourceFiles.size()));
+			if( this.sourceFiles.size() == 0) {
+				LOG.warn(String.format("%s - %s 目录下没有匹配的文件",Thread.currentThread().getName(),this.path.toString()));
+			}
 		}
 
 		@Override
@@ -317,8 +329,7 @@ public class FtpReader extends Reader {
 				InputStream inputStream = null;
 				
 				try {
-					inputStream = ftpHelper.getInputStream(fileName);
-					
+										
 					String fileExt = fileName.substring(fileName.lastIndexOf('.'));
 					FileFormat fmt;
 					
@@ -331,11 +342,14 @@ public class FtpReader extends Reader {
 					}
 					
 					if (fmt == FileFormat.TEXT) {
+						//使用BOMInputStream 去除UTF-8 with BOM头三个标记字节
+						inputStream = new BOMInputStream(ftpHelper.getInputStream(fileName));
 						UnstructuredStorageReaderUtil.readFromStream(inputStream, "[FTP]"+fileName, this.readerSliceConfig,
 								recordSender, this.getTaskPluginCollector());
 					}else {
-						UnstructuredStorageReaderUtil.readFromExcel( inputStream,fmt, this.readerSliceConfig,
-									fileName, recordSender, this.getTaskPluginCollector());
+						inputStream = ftpHelper.getInputStream(fileName);
+						UnstructuredStorageReaderUtil.readFromExcel( inputStream,fmt, "[FTP]"+fileName,
+									this.readerSliceConfig, recordSender, this.getTaskPluginCollector());
 					}
 				}finally {
 					if (inputStream != null) {

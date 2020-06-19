@@ -5,4 +5,6 @@ package com.alibaba.datax.plugin.reader.txtfilereader;
  */
 public class Key {
 	public static final String PATH = "path";
+	
+	public static final String IGNORE_PATH_NOT_EXIST = "ignorePathNotExist";
 }

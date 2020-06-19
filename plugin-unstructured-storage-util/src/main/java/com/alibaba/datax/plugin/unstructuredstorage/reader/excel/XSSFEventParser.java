@@ -434,7 +434,7 @@ public class XSSFEventParser extends DefaultHandler {
 			thisStr = "";
 			break;
 		case FORMULA: // 公式
-			thisStr = '"' + value.toString() + '"';
+			thisStr = value.toString();
 			break;
 		case INLINESTR:
 			XSSFRichTextString rtsi = new XSSFRichTextString(value.toString());
@@ -464,13 +464,17 @@ public class XSSFEventParser extends DefaultHandler {
 			break;
 		case DATE: // 日期
 			
-			thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
-			// 对日期字符串作特殊处理，去掉T
-			thisStr = thisStr.replace("T", " ");
-			
-			// TODO: 如果内容非日期但设置的是日期格式，需要按字符串处理，无法准确识别，暂用日期比较模糊判断
-			// 在Excel2003解析中没这个问题
-			if( thisStr.compareTo("1920-01-01 00:00:00") < 0 ) {				
+			try{
+				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
+				// TODO: 如果内容非日期但设置的是日期格式，需要按字符串处理，无法准确识别，暂用日期比较模糊判断。在Excel2003解析中没这个问题
+				if( thisStr.compareTo("1920-01-01 00:00:00") < 0 ) {				
+					thisStr = queryStringByIndex(value);					
+				}else{
+					// 对日期字符串作特殊处理，去掉T
+					thisStr = thisStr.replace("T", " ");
+				}
+			}catch(NumberFormatException e){
+				// 如果value不是有效数字，则按字符串查询
 				thisStr = queryStringByIndex(value);
 			}
 			break;

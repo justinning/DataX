@@ -206,13 +206,10 @@ public class HSSFEventParser implements HSSFListener {
 				this.sheetMap.put(sheetIndex, false);
 			}
 			break;
-		case EOFRecord.sid:
-			// LOG.debug("EOFRecord");
-			break;
 		case RowRecord.sid:
 			RowRecord rowRec = (RowRecord) record;
 			// LOG.debug("Row found. Number of Cells: " + rowRec.getLastCol());
-			if (this.currentSheet == -1 && rowRec.getRowNumber() == 0) { // first sheet
+			if (this.currentSheet == -1 && rowRec.getRowNumber() == 0) {
 				// special handling first sheet
 				this.currentSheet = 0;
 			} else if (this.currentSheet >= 0 && rowRec.getRowNumber() == 0) {
@@ -378,10 +375,12 @@ public class HSSFEventParser implements HSSFListener {
 			// LOG.debug("Ignored record: "+record.getSid());
 			break;
 		}
-		if (record instanceof MissingRowDummyRecord) { // this is an empty row in the Excel
+		
+		// this is an empty row in the Excel
+		if (record instanceof MissingRowDummyRecord) { 
 			MissingRowDummyRecord emptyRow = (MissingRowDummyRecord) record;
 			// LOG.debug("Detected Empty row");
-			if ((this.currentSheet == -1) && (emptyRow.getRowNumber() == 0)) { // first sheet
+			if ((this.currentSheet == -1) && (emptyRow.getRowNumber() == 0)) {
 				// special handling first sheet
 				this.currentSheet = 1;
 			} else if ((this.currentSheet >= 0) && (emptyRow.getRowNumber() == 0)) {
@@ -417,20 +416,20 @@ public class HSSFEventParser implements HSSFListener {
 			}
 			lastColumnNumber = -1;
 
-			if (curRow + 1 == headerLine) {
-				totalColumns = cellList.size(); // 获取列数
+			if (notEmptyLine && this.sheetMap.get(currentSheet) ) {
+				
+				if (curRow + 1 == headerLine) {
+					totalColumns = cellList.size(); // 获取列数
 
-				// 获得headers各字段对应的列索引
-				if (usecols != null && usecols.length > 0 && headerIndexs == null) {
+					// 获得headers各字段对应的列索引
+					if (usecols != null && usecols.length > 0 && headerIndexs == null) {
 
-					headerIndexs = new int[usecols.length];
-					for (int i = 0; i < usecols.length; i++) {
-						headerIndexs[i] = cellList.indexOf(usecols[i]);
+						headerIndexs = new int[usecols.length];
+						for (int i = 0; i < usecols.length; i++) {
+							headerIndexs[i] = cellList.indexOf(usecols[i]);
+						}
 					}
 				}
-			}
-
-			if (notEmptyLine) {
 
 				if ((includeHeader && curRow + 1 >= headerLine) || (!includeHeader && curRow + 1 > headerLine)) {
 
@@ -442,24 +441,23 @@ public class HSSFEventParser implements HSSFListener {
 						}
 					}
 
-					if (this.sheetMap.get(currentSheet)) {
-						String[] recordRow = null;
-						if (headerIndexs != null) {
-							recordRow = new String[headerIndexs.length];
-							for (int i = 0; i < headerIndexs.length; i++)
-								try {
-									recordRow[i] = cellList.get(headerIndexs[i]);
-								} catch (IndexOutOfBoundsException e) {
-								}
-						} else {
-							recordRow = new String[cellList.size()];
-							for (int i = 0; i < cellList.size(); i++)
-								recordRow[i] = cellList.get(i);
-						}
-						dataFrame.add(recordRow);
-						totalRows++;
+					String[] recordRow = null;
+					if (headerIndexs != null) {
+						recordRow = new String[headerIndexs.length];
+						for (int i = 0; i < headerIndexs.length; i++)
+							try {
+								recordRow[i] = cellList.get(headerIndexs[i]);
+							} catch (IndexOutOfBoundsException e) {
+							}
+					} else {
+						recordRow = new String[cellList.size()];
+						for (int i = 0; i < cellList.size(); i++)
+							recordRow[i] = cellList.get(i);
 					}
+					dataFrame.add(recordRow);
+					totalRows++;
 				}
+				
 			}
 			// 清空容器
 			cellList.clear();

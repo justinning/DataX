@@ -46,4 +46,6 @@ public class Key {
 	public static final String FILESERVER_ID = "fileServerId";
 	
 	public static final String NUMERIC_FORMAT = "numericFormat";
+	
+	public static final String DELIMS_REPLACEMENT = "delimsReplacement";
 }

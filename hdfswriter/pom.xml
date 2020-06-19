@@ -86,12 +86,12 @@
             <version>${hive.version}</version>
         </dependency>
 
-        <dependency>
+        <!--  dependency>
             <groupId>com.alibaba.datax</groupId>
             <artifactId>plugin-unstructured-storage-util</artifactId>
             <version>${datax-project-version}</version>
         </dependency>
-
+        -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>

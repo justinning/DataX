@@ -1,11 +1,12 @@
 package com.alibaba.datax.plugin.writer.hdfswriter;
 
-import com.alibaba.datax.common.exception.DataXException;
-import com.alibaba.datax.common.plugin.RecordReceiver;
-import com.alibaba.datax.common.spi.Writer;
-import com.alibaba.datax.common.util.Configuration;
-import com.alibaba.datax.plugin.unstructuredstorage.writer.Constant;
-import com.google.common.collect.Sets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
 import org.apache.commons.io.Charsets;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -13,7 +14,11 @@ import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import com.alibaba.datax.common.exception.DataXException;
+import com.alibaba.datax.common.plugin.RecordReceiver;
+import com.alibaba.datax.common.spi.Writer;
+import com.alibaba.datax.common.util.Configuration;
+import com.google.common.collect.Sets;
 
 
 public class HdfsWriter extends Writer {
@@ -87,7 +92,7 @@ public class HdfsWriter extends Writer {
             //writeMode check
             this.writeMode = this.writerSliceConfig.getNecessaryValue(Key.WRITE_MODE, HdfsWriterErrorCode.REQUIRED_VALUE);
             writeMode = writeMode.toLowerCase().trim();
-            Set<String> supportedWriteModes = Sets.newHashSet("append", "nonconflict truncate");
+            Set<String> supportedWriteModes = Sets.newHashSet("append", "nonconflict", "truncate");
             if (!supportedWriteModes.contains(writeMode)) {
                 throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
                         String.format("仅支持append, nonConflict,truncate三种模式, 不支持您配置的 writeMode 模式 : [%s]",
@@ -252,9 +257,7 @@ public class HdfsWriter extends Writer {
                     this.endFiles.add(endFullFileName);
                 }
 
-                splitedTaskConfig
-                        .set(com.alibaba.datax.plugin.unstructuredstorage.writer.Key.FILE_NAME,
-                                fullFileName);
+                splitedTaskConfig.set(Key.FILE_NAME,fullFileName);
 
                 LOG.info(String.format("splited write file name:[%s]",
                         fullFileName));
