@@ -111,16 +111,20 @@ public class ExcelReader extends Reader {
 			// int splitNumber = adviceNumber;
 			int splitNumber = this.sourceFiles.size();
 			if (0 == splitNumber) {
-				throw DataXException.asDataXException(ExcelReaderErrorCode.EMPTY_DIR_EXCEPTION,
-						String.format("未能找到待读取的文件,请确认您的配置项path: %s",
-								this.originConfig.getString(com.alibaba.datax.plugin.reader.excelreader.Key.PATH)));
-			}
-
-			List<List<String>> splitedSourceFiles = this.splitSourceFiles(this.sourceFiles, splitNumber);
-			for (List<String> files : splitedSourceFiles) {
+				//throw DataXException.asDataXException(ExcelReaderErrorCode.EMPTY_DIR_EXCEPTION,
+				//		String.format("未能找到待读取的文件,请确认您的配置项path: %s",
+				//				this.originConfig.getString(com.alibaba.datax.plugin.reader.excelreader.Key.PATH)));
+				List<String> emptyFiles = new ArrayList<String>();
 				Configuration splitedConfig = this.originConfig.clone();
-				splitedConfig.set(com.alibaba.datax.plugin.reader.excelreader.Constant.SOURCE_FILES, files);
+				splitedConfig.set(Constant.SOURCE_FILES, emptyFiles);
 				readerSplitConfigs.add(splitedConfig);
+			} else {
+				List<List<String>> splitedSourceFiles = this.splitSourceFiles(this.sourceFiles, splitNumber);
+				for (List<String> files : splitedSourceFiles) {
+					Configuration splitedConfig = this.originConfig.clone();
+					splitedConfig.set(com.alibaba.datax.plugin.reader.excelreader.Constant.SOURCE_FILES, files);
+					readerSplitConfigs.add(splitedConfig);
+				}
 			}
 			LOG.debug("split() ok and end...");
 			return readerSplitConfigs;
@@ -209,6 +213,14 @@ public class ExcelReader extends Reader {
 
 		// 正则过滤
 		private boolean isTargetFile(String regexPath, String absoluteFilePath) {
+			// 过滤~$ 开头的excel文件
+			int ch = absoluteFilePath.lastIndexOf(File.separatorChar);
+			if (ch > 0 && ch < absoluteFilePath.length()-1) {
+				String fileName = absoluteFilePath.substring(ch + 1).toLowerCase();
+				if(fileName.startsWith("~$") && (fileName.endsWith(".xls") || fileName.endsWith(".xlsx"))) {
+					return false;
+				}
+			}
 			if (this.isRegexPath.get(regexPath)) {
 				return this.pattern.get(regexPath).matcher(absoluteFilePath).matches();
 			} else {

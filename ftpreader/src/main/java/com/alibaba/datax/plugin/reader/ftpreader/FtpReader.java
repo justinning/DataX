@@ -5,7 +5,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
@@ -147,15 +146,21 @@ public class FtpReader extends Reader {
 				
 				if( fileNameFilter == null || "".equals(fileNameFilter)){
 					for(FileInfo file: files) {
-						if(statusManage.isNewFile(serverId, file, readMode)) {
+						if(file.getSize() == 0) {
+							LOG.error(String.format("[%s] 是一个空文件！", file.getPath()));
+						}
+						else if(isTargetFile(serverId,file,readMode)) {
 							this.sourceFiles.add(file);
 						}
 					}
 				}else {
 					Pattern pat = Pattern.compile(fileNameFilter);				
 					for(FileInfo file: files) {
-						if(pat.matcher(file.getPath()).matches() 
-								&& statusManage.isNewFile(serverId, file, readMode)) {
+						if(file.getSize() == 0) {
+							LOG.error(String.format("[%s] 是一个空文件！", file.getPath()));
+						}
+						else if(pat.matcher(file.getPath()).matches() 
+								&& isTargetFile(serverId, file, readMode)) {
 							this.sourceFiles.add(file);
 						}
 					}
@@ -232,7 +237,19 @@ public class FtpReader extends Reader {
 			}
 			return splitedList;
 		}
-
+		
+		private boolean isTargetFile(String serverId,FileInfo file,String readMode) {
+			// 过滤~$ 开头的excel文件
+			int ch = file.getPath().lastIndexOf(File.separatorChar);
+			if (ch > 0 && ch < file.getPath().length()-1) {
+				String fileName = file.getPath().substring(ch + 1).toLowerCase();
+				if(fileName.startsWith("~$") && (fileName.endsWith(".xls") || fileName.endsWith(".xlsx"))) {
+					return false;
+				}
+			}
+			
+			return statusManage.isNewFile(serverId, file, readMode);
+		}
 	}
 
 	public static class Task extends Reader.Task {

@@ -214,6 +214,7 @@ public class HSSFEventParser implements HSSFListener {
 				this.currentSheet = 0;
 			} else if (this.currentSheet >= 0 && rowRec.getRowNumber() == 0) {
 				this.currentSheet++; // start processing next sheet
+				this.totalColumns = 0;
 			}
 			break;
 		case SSTRecord.sid:
@@ -221,7 +222,7 @@ public class HSSFEventParser implements HSSFListener {
 			break;
 		case BlankRecord.sid: // 单元格为空白
 
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -232,7 +233,7 @@ public class HSSFEventParser implements HSSFListener {
 			cellList.add(thisColumn, thisStr);
 			break;
 		case BoolErrRecord.sid: // 单元格为布尔类型
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -242,7 +243,7 @@ public class HSSFEventParser implements HSSFListener {
 			thisStr = berec.getBooleanValue() + "";
 			break;
 		case FormulaRecord.sid:// 单元格为公式类型
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -281,7 +282,7 @@ public class HSSFEventParser implements HSSFListener {
 
 			break;
 		case StringRecord.sid: // 单元格中公式的字符串
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -295,7 +296,7 @@ public class HSSFEventParser implements HSSFListener {
 			}
 			break;
 		case LabelRecord.sid:
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -308,7 +309,7 @@ public class HSSFEventParser implements HSSFListener {
 			checkRowIsNull(value);
 			break;
 		case LabelSSTRecord.sid: // 单元格为字符串类型
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -326,7 +327,7 @@ public class HSSFEventParser implements HSSFListener {
 			}
 			break;
 		case NumberRecord.sid: // 单元格为数字类型
-			if (!this.sheetMap.get(this.currentSheet)) {
+			if (!findReadTag()) {
 				// if not then do nothing
 				break;
 			}
@@ -385,6 +386,7 @@ public class HSSFEventParser implements HSSFListener {
 				this.currentSheet = 1;
 			} else if ((this.currentSheet >= 0) && (emptyRow.getRowNumber() == 0)) {
 				this.currentSheet++; // start processing next sheet
+				this.totalColumns = 0;
 			}
 		}
 		// 遇到新行的操作
@@ -418,6 +420,7 @@ public class HSSFEventParser implements HSSFListener {
 
 			if (notEmptyLine && this.sheetMap.get(currentSheet) ) {
 				
+				// 如果表头行是空行，totalColumns将始终是0，所有的数据会被忽略
 				if (curRow + 1 == headerLine) {
 					totalColumns = cellList.size(); // 获取列数
 
@@ -431,7 +434,7 @@ public class HSSFEventParser implements HSSFListener {
 					}
 				}
 
-				if ((includeHeader && curRow + 1 >= headerLine) || (!includeHeader && curRow + 1 > headerLine)) {
+				if ( totalColumns> 0 && ((includeHeader && curRow + 1 >= headerLine) || (!includeHeader && curRow + 1 > headerLine))) {
 
 					// 2003版尾部为空单元格的，xls里面是以该行最后一个有值的单元格为结束标记的，尾部空单元格跳过，故需补全
 					if (cellList.size() <= totalColumns) { // 其他行如果尾部单元格总数小于totalColums，则补全单元格
@@ -463,6 +466,14 @@ public class HSSFEventParser implements HSSFListener {
 			cellList.clear();
 			notEmptyLine = false;
 		}
+	}
+
+	private boolean findReadTag() {
+		Boolean readTag = this.sheetMap.get(this.currentSheet);
+		if ( null != readTag && readTag)
+			return true;
+		else
+			return false;
 	}
 
 	private boolean isReadSheet(int sheetIndex, String sheetName) {

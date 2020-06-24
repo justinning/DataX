@@ -44,7 +44,7 @@ public class FileStatusManage {
 		}
 
 		if (JDBC_URL == null || DRIVER_CLASS == null || USER == null || PASSWORD == null) {
-			LOG.error("状态数据库JDBC信息不完整，请检查！");
+			LOG.warn("状态数据库JDBC信息不完整，配置正确后才能使用！");
 			return;
 		}
 

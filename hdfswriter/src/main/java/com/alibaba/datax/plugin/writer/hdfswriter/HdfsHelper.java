@@ -315,7 +315,7 @@ public  class HdfsHelper {
             }
         }
         try {
-            RecordWriter writer = outFormat.getRecordWriter(fileSystem, conf, outputPath.toString(), Reporter.NULL);
+            RecordWriter writer = null;
             Record record = null;
             while ((record = lineReceiver.getFromReader()) != null) {
             	// 下列代码支持 column ["*"] 配置
@@ -327,10 +327,16 @@ public  class HdfsHelper {
                 }
                 MutablePair<Text, Boolean> transportResult = transportOneRecord(record, fieldDelimiter, nullFormat, columns, taskPluginCollector);
                 if (!transportResult.getRight()) {
+                	if (writer == null) {
+                		//延迟写入，避免空记录时创建多余的临时文件
+                		writer = outFormat.getRecordWriter(fileSystem, conf, outputPath.toString(), Reporter.NULL);
+                	}
                     writer.write(NullWritable.get(),transportResult.getLeft());
                 }
             }
-            writer.close(Reporter.NULL);
+            if (writer != null) {
+            	writer.close(Reporter.NULL);
+            }
         } catch (Exception e) {
             String message = String.format("写文件文件[%s]时发生IO异常,请检查您的网络是否正常！", fileName);
             LOG.error(message);

@@ -9,14 +9,16 @@
 # 启动一个Job，返回Job ID
 # JOB_DESC=`cat xxxx.json`
 # curl -d "jobDesc=$JOB_DESC&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
+# 或
+# curl -d "jobDesc=http://<dns>/path/test.json&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
+# curl -d "jobDesc=<local path>/dir/test.json&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
 # 
 # 查询所有Job ID列表
 # curl http://localhost:9999/jobs
 
 # 查询Job状态
 # curl http://localhost:9999/job/1
-# curl http://localhost:9999/job/1/attr
-# attr可以是stdout,stderr,status,errmsg
+# curl http://localhost:9999/job/1/attr   attr可以是stdout,stderr,status,errmsg
 
 # 中止并移除一个Job
 # curl -X DELETE http://localhost:9999/job/1
@@ -29,6 +31,7 @@ import inspect
 import ctypes
 from flask import Flask, request
 import json
+import re
 import tempfile
 from datax import *
 
@@ -36,7 +39,7 @@ app = Flask(__name__)
 
 # 全局变量，保存所有job的运行结果
 jobInfos = {}
-
+logDir = os.path.join(os.path.dirname(os.path.dirname(__file__)),'log','server')
 
 def getjobInfo(jobid):
     jobInfo = None
@@ -65,6 +68,8 @@ def stop_thread(thread):
 def start_job_worker(jobid,jvmArgs, params,jobDesc):
     # printCopyright()
     inputArgv = []
+    filepath = None
+
     if jobid is not None:
         inputArgv.append('--jobid={0}'.format(jobid))
     if jvmArgs is not None:
@@ -72,17 +77,23 @@ def start_job_worker(jobid,jvmArgs, params,jobDesc):
     if params is not None:
         inputArgv.append('-p\"{0}\"'.format(params))
 
-    fd, filepath = tempfile.mkstemp()
- 
-    with open(filepath,'wb') as f:
-        # ensure_ascii一定要设为False，否则返回的是ascii格式的，其中仍然包含着unicode编码文本
-        str = json.dumps(jobDesc,ensure_ascii=False,encoding='utf-8')
-        str = str.encode('utf-8')
-        f.write(str)
-        # json.dump(jobDesc,f,encoding='utf-8')
-        f.close()
-
-    inputArgv.append(filepath)
+    #  如果以{开头，表示输入的是描述Job的JSON，否则按json文件路径或URL处理
+    if( re.search('\s*\{.*',jobDesc)):
+        fd, filepath = tempfile.mkstemp()
+        with open(filepath,'wb') as f:
+            # ensure_ascii一定要设为False，否则返回的是ascii格式的，其中仍然包含着unicode编码文本
+            jobDesc = json.loads(jobDesc,encoding='utf-8')
+            str = json.dumps(jobDesc,ensure_ascii=False,encoding='utf-8')
+            str = str.encode('utf-8')
+            f.write(str)
+            # json.dump(jobDesc,f,encoding='utf-8')
+            f.close()
+            inputArgv.append(filepath)
+    else:
+        # unicode类型转str类型，datax json文件路径只允许str类型
+        jobDesc = jobDesc.encode('utf-8')
+        inputArgv.append(jobDesc)
+    
     # 为复用datax.py,模仿它的参数构造
     parser = getOptionParser()
     options, args = parser.parse_args(inputArgv)
@@ -95,7 +106,12 @@ def start_job_worker(jobid,jvmArgs, params,jobDesc):
         (stdout, stderr) = child_process.communicate()
         # print(stdout)
         jobInfo = getjobInfo(jobid)
-        jobInfo["stdout"] = stdout
+
+        # 日志可能较大，需要保存到磁盘文件中
+        with open(os.path.join(logDir,'job-{}.log'.format(jobid)),'wb') as f:
+            f.write(stdout)
+            f.close()
+  
         jobInfo["stderr"] = stderr
         jobInfo["return_code"] = child_process.returncode
         jobInfo.pop("jobThread")
@@ -103,7 +119,6 @@ def start_job_worker(jobid,jvmArgs, params,jobDesc):
     except SystemExit as e:
         jobInfo = getjobInfo(jobid)
         jobInfo["return_code"] = '1'
-        jobInfo["stdout"] = ''
         jobInfo["stderr"] = 'Job {} has been killed'.format(jobid)
         jobInfo.pop("jobThread")
         jobInfos[jobid] = jobInfo
@@ -124,8 +139,6 @@ def start_job():
         jvmArgs = values.get("jvm")
         params = values.get("params")
         jobDesc = values.get("jobDesc")
-        if jobDesc is not None:
-            jobDesc = json.loads(jobDesc,encoding='utf-8')
 
         jobid = str(len(jobInfos)+1)
         t = threading.Thread(   target=start_job_worker,
@@ -174,10 +187,16 @@ def get_job(jobid='',attr=None):
             reqResult["status"] = "error"
             reqResult['errmsg'] = 'Job {} is running.'.format(jobid)
         else:
-            reqResult["status"] = "success"
-            reqResult["stdout"] = jobInfo["stdout"]
+            reqResult["status"] = "success"            
             reqResult["stderr"] = jobInfo["stderr"]
             reqResult["return_code"] = jobInfo["return_code"]
+            
+            if attr == 'stdout':
+                logfile = os.path.join(logDir,'job-{}.log'.format(jobid))
+                if os.path.exists(logfile):
+                    with open(logfile,'rb') as f:
+                        reqResult["stdout"] = f.read()
+                        f.close()
         
             if attr is None:
                 return json.dumps(reqResult,ensure_ascii=False,encoding='utf-8')
@@ -229,11 +248,20 @@ if __name__ == '__main__':
         parser.add_argument('--host',
                             default='127.0.0.1',
                             type=str,
-                            help='bind ip address')                    
+                            help='bind ip address')
+        parser.add_argument('--logdir',
+                            default=logDir,
+                            type=str,
+                            help='logfile output dir')    
         args = parser.parse_args()
         port = args.port
         host = args.host
+        logDir = args.logdir
 
+        # 检查保存日志的目录
+        if not os.path.exists(logDir):
+            os.makedirs(logDir)
+        
         # debug=True时，在VSCode中断点失效
         app.run(debug=False, host=host, port=port)
     except Exception as e:

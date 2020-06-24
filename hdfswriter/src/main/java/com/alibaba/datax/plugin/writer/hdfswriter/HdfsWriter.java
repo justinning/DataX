@@ -3,6 +3,7 @@ package com.alibaba.datax.plugin.writer.hdfswriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -38,7 +39,7 @@ public class HdfsWriter extends Writer {
         private String encoding;
         private HashSet<String> tmpFiles = new HashSet<String>();//临时文件全路径
         private HashSet<String> endFiles = new HashSet<String>();//最终文件全路径
-
+        
         private HdfsHelper hdfsHelper = null;
 
         @Override
@@ -173,9 +174,10 @@ public class HdfsWriter extends Writer {
                 }
                 
                 if ("truncate".equals(writeMode) && isExistFile ) {
-	                 LOG.info(String.format("由于您配置了writeMode truncate, 开始清理 [%s] 下面以 [%s] 开头的内容",
-	                 path, fileName));
-	                 hdfsHelper.deleteFiles(existFilePaths);
+                	 //延迟删除，在post函数中处理
+	                 LOG.info(String.format("由于您配置了writeMode truncate, 稍后处理中会清理 [%s] 下面以 [%s] 开头的内容",
+	                     path, fileName));
+
                 } else if ("append".equalsIgnoreCase(writeMode)) {
                     LOG.info(String.format("由于您配置了writeMode append, 写入前不做清理工作, [%s] 目录下写入相应文件名前缀  [%s] 的文件",
                             path, fileName));
@@ -190,8 +192,8 @@ public class HdfsWriter extends Writer {
                             String.format("由于您配置了writeMode nonConflict,但您配置的path: [%s] 目录不为空, 下面存在其他文件或文件夹.", path));
                 }
             }else{
-            	//hdfs目录不存在时自动创建出来
-            	hdfsHelper.createDir(new Path(path));
+            	//hdfs目录不存在时不要先创建，如果没有记录则会造成空目录
+            	//hdfsHelper.createDir(new Path(path));
                 //throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
                 //        String.format("您配置的path: [%s] 不存在, 请先在hive端创建对应的数据库和表.", path));
             }
@@ -199,7 +201,26 @@ public class HdfsWriter extends Writer {
 
         @Override
         public void post() {
-            hdfsHelper.renameFile(tmpFiles, endFiles);
+        	Iterator<String> it = tmpFiles.iterator();
+        	if( it.hasNext() && hdfsHelper.isPathexists(it.next())) {
+        		//检查正式目录是否存在
+        		if(hdfsHelper.isPathDir(path)) {
+        			
+	        		if ("truncate".equals(writeMode)) {
+		                Path[] existFilePaths = hdfsHelper.hdfsDirList(path,fileName);
+		                boolean isExistFile = false;
+		                if(existFilePaths.length > 0){
+		                	LOG.info(String.format("由于您配置了writeMode truncate, 开始清理 [%s] 下面以 [%s] 开头的内容",
+		       	                 path, fileName));
+		       	            hdfsHelper.deleteFiles(existFilePaths);
+		                }
+	                }
+        		}else {
+        			hdfsHelper.createDir(new Path(path));
+        		}
+        		//移动临时目录下的文件到正式目录下
+                hdfsHelper.renameFile(tmpFiles, endFiles);
+        	}
         }
 
         @Override

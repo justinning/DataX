@@ -30,6 +30,7 @@ public abstract class FtpHelper {
 	 */
 	public abstract boolean isDirExist(String directoryPath);
 	/**
+	 * @param fileInfo TODO
 	 * 
 	* @Title: isFileExist 
 	* @Description: 判断指定路径是否是文件
@@ -38,7 +39,7 @@ public abstract class FtpHelper {
 	* @return boolean 
 	* @throws
 	 */
-	public abstract boolean isFileExist(String filePath);
+	public abstract boolean isFileExist(String filePath, FileInfo fileInfo);
 	/**
 	 * 
 	* @Title: isSymbolicLink 
@@ -96,5 +97,4 @@ public abstract class FtpHelper {
 	
 	public void readFilePost() {
 	}
-	public abstract long getFileTimestamp(String filePath);
 }

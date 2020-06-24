@@ -526,13 +526,13 @@ public class UnstructuredStorageReaderUtil {
 			}
 		} catch (FileNotFoundException fnfe) {
 			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.FILE_NOT_EXISTS,
-					String.format("无法找到文件 : [%s]", inputStream), fnfe);
+					String.format("无法找到文件 : [%s]", context), fnfe);
 		} catch (IOException ioe) {
 			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.READ_FILE_IO_ERROR,
-					String.format("读取文件错误 : [%s]", inputStream), ioe);
+					String.format("读取文件错误 : [%s]", context), ioe);
 		} catch (Exception e) {
 			throw DataXException.asDataXException(UnstructuredStorageReaderErrorCode.RUNTIME_EXCEPTION,
-					String.format("运行时异常 : %s", e.getMessage()), e);
+					String.format("运行时异常 : %s，文件：[%s]", e.getMessage(),context), e);
 		}
 
 	}
@@ -575,7 +575,7 @@ public class UnstructuredStorageReaderUtil {
 		if (null == columnConfigs || columnConfigs.size() == 0) {
 			for (String columnValue : sourceLine) {
 				// not equalsIgnoreCase, it's all ok if nullFormat is null
-				if (columnValue == null || columnValue.equals(nullFormat)) {
+				if (columnValue == null || columnValue.length() == 0 || columnValue.equals(nullFormat)) {
 					columnGenerated = new StringColumn(null);
 				} else {
 					columnGenerated = new StringColumn(columnValue);
@@ -621,8 +621,8 @@ public class UnstructuredStorageReaderUtil {
 						columnValue = columnConst;
 					}
 					Type type = Type.valueOf(columnType.toUpperCase());
-					// it's all ok if nullFormat is null
-					if (columnValue.equals(nullFormat)) {
+					// 值为空字符串或等于nullFormat时按NULL值处理
+					if (columnValue.length() == 0 || columnValue.equals(nullFormat)) {
 						columnValue = null;
 					}
 					switch (type) {

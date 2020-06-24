@@ -118,11 +118,14 @@ public class StandardFtpHelper extends FtpHelper {
 	}
 
 	@Override
-	public boolean isFileExist(String filePath) {
+	public boolean isFileExist(String filePath, FileInfo fileInfo) {
 		boolean isExitFlag = false;
 		try {
 			FTPFile[] ftpFiles = ftpClient.listFiles(new String(filePath.getBytes(),FTP.DEFAULT_CONTROL_ENCODING));
 			if (ftpFiles.length == 1 && ftpFiles[0].isFile()) {
+				fileInfo.setPath(filePath);
+				fileInfo.setSize(ftpFiles[0].getSize());
+				fileInfo.setLastModified(ftpFiles[0].getTimestamp().getTimeInMillis());
 				isExitFlag = true;
 			}
 		} catch (IOException e) {
@@ -155,6 +158,7 @@ public class StandardFtpHelper extends FtpHelper {
 		if(parentLevel < maxTraversalLevel){
 			String parentPath = null;// 父级目录,以'/'结尾
 			int pathLen = directoryPath.length();
+			FileInfo fileInfo = new FileInfo();
 			if (directoryPath.contains("*") || directoryPath.contains("?")) {
 				// path是正则表达式				
 				String subPath  = UnstructuredStorageReaderUtil.getRegexPathParentPath(directoryPath);
@@ -173,9 +177,9 @@ public class StandardFtpHelper extends FtpHelper {
 				} else {
 					parentPath = directoryPath + IOUtils.DIR_SEPARATOR;
 				}
-			} else if (isFileExist(directoryPath)) {
+			} else if (isFileExist(directoryPath, fileInfo)) {
 				// path指向具体文件
-				sourceFiles.add(new FileInfo(directoryPath,getFileTimestamp(directoryPath)));
+				sourceFiles.add(new FileInfo(fileInfo));
 				return sourceFiles;
 			} else if(isSymbolicLink(directoryPath)){
 				//path是链接文件
@@ -200,7 +204,11 @@ public class StandardFtpHelper extends FtpHelper {
 						}
 					} else if (ff.isFile()) {
 						// 是文件
-						sourceFiles.add(new FileInfo(filePath,ff.getTimestamp().getTimeInMillis()));
+						FileInfo fi = new FileInfo();
+						fi.setSize(ff.getSize());
+						fi.setPath(filePath);
+						fi.setLastModified(ff.getTimestamp().getTimeInMillis());
+						sourceFiles.add(fi);
 					} else if(ff.isSymbolicLink()){
 						//是链接文件
 						String message = String.format("文件:[%s]是链接文件，当前不支持链接文件的读取", filePath);
@@ -237,24 +245,7 @@ public class StandardFtpHelper extends FtpHelper {
 			throw DataXException.asDataXException(FtpReaderErrorCode.OPEN_FILE_ERROR, message);
 		}
 	}
-	
-	@Override
-	public long getFileTimestamp(String filePath) {
 		
-		try {
-			
-			FTPFile[] ftpFiles = ftpClient.listFiles(new String(filePath.getBytes(),FTP.DEFAULT_CONTROL_ENCODING));
-			if (ftpFiles.length == 1 && ftpFiles[0].isFile()) {
-				return ftpFiles[0].getTimestamp().getTimeInMillis();
-			}
-		} catch (IOException e) {
-			String message = String.format("获取文件：[%s] 属性时发生I/O异常,请确认与ftp服务器的连接正常", filePath);
-			LOG.debug(message);
-			throw DataXException.asDataXException(FtpReaderErrorCode.COMMAND_FTP_IO_EXCEPTION, message, e);
-		}
-		return 0;
-	}
-	
 	@Override
 	public void readFilePost() {
 		if( ftpClient != null) {

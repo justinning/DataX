@@ -181,6 +181,7 @@ public class XSSFEventParser extends DefaultHandler {
 			}
 			sheet.close();
 			sheetIndex++;
+			this.totalColumns = 0;
 		}
 		return dataFrame;
 	}
@@ -266,7 +267,7 @@ public class XSSFEventParser extends DefaultHandler {
 	@Override
 	public void endElement(String uri, String localName, String name) throws SAXException {
 		// t元素也包含字符串
-		if (isTElement) {// 这个程序没经过
+ 		if (isTElement) {// 这个程序没经过
 			// 将单元格内容加入rowlist中，在这之前先去掉字符串前后的空白符
 			String value = lastIndex.trim();
 			cellList.add(curCol, value);
@@ -316,6 +317,7 @@ public class XSSFEventParser extends DefaultHandler {
 				}
 				int curRow = Integer.parseInt(r);
 
+				// 如果表头行是空行，totalColumns将始终是0，所有的数据会被忽略
 				if (curRow == headerLine) {
 					totalColumns = cellList.size(); // 获取列数
 					// 获得headers各字段对应的列索引
@@ -328,7 +330,7 @@ public class XSSFEventParser extends DefaultHandler {
 					}
 				}
 
-				if (notEmptyLine) { // 该行不为空行
+				if (notEmptyLine && totalColumns > 0) { // 该行不为空行
 
 					if ((includeHeader && curRow >= headerLine) || (!includeHeader && curRow > headerLine)) {
 						if (cellList.size() <= totalColumns) { // 其他行如果尾部单元格总数小于totalColums，则补全单元格

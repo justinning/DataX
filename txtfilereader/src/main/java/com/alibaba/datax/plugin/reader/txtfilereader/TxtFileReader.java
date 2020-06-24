@@ -1,21 +1,5 @@
 package com.alibaba.datax.plugin.reader.txtfilereader;
 
-import com.alibaba.datax.common.exception.DataXException;
-import com.alibaba.datax.common.plugin.RecordSender;
-import com.alibaba.datax.common.spi.Reader;
-import com.alibaba.datax.common.util.Configuration;
-import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderErrorCode;
-import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderUtil;
-import com.google.common.collect.Sets;
-
-import org.apache.commons.io.Charsets;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.io.input.BOMInputStream;
-import org.apache.commons.lang3.BooleanUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -29,6 +13,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import org.apache.commons.io.Charsets;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.input.BOMInputStream;
+import org.apache.commons.lang3.BooleanUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.alibaba.datax.common.exception.DataXException;
+import com.alibaba.datax.common.plugin.RecordSender;
+import com.alibaba.datax.common.spi.Reader;
+import com.alibaba.datax.common.util.Configuration;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderErrorCode;
+import com.alibaba.datax.plugin.unstructuredstorage.reader.UnstructuredStorageReaderUtil;
+import com.google.common.collect.Sets;
 
 /**
  * Created by haiwei.luo on 14-9-20.
@@ -192,19 +192,22 @@ public class TxtFileReader extends Reader {
 			// int splitNumber = adviceNumber;
 			int splitNumber = this.sourceFiles.size();
             if (0 == splitNumber) {
-                throw DataXException.asDataXException(
-                        TxtFileReaderErrorCode.EMPTY_DIR_EXCEPTION, String
-                                .format("未能找到待读取的文件,请确认您的配置项path: %s",
-                                        this.originConfig.getString(Key.PATH)));
-            }
-
-			List<List<String>> splitedSourceFiles = this.splitSourceFiles(
-					this.sourceFiles, splitNumber);
-			for (List<String> files : splitedSourceFiles) {
+                //throw DataXException.asDataXException(TxtFileReaderErrorCode.EMPTY_DIR_EXCEPTION, String
+                //                .format("未能找到待读取的文件,请确认您的配置项path: %s",
+                //                        this.originConfig.getString(Key.PATH)));
+				List<String> emptyFiles = new ArrayList<String>();
 				Configuration splitedConfig = this.originConfig.clone();
-				splitedConfig.set(Constant.SOURCE_FILES, files);
+				splitedConfig.set(Constant.SOURCE_FILES, emptyFiles);
 				readerSplitConfigs.add(splitedConfig);
-			}
+            }else {
+				List<List<String>> splitedSourceFiles = this.splitSourceFiles(
+						this.sourceFiles, splitNumber);
+				for (List<String> files : splitedSourceFiles) {
+					Configuration splitedConfig = this.originConfig.clone();
+					splitedConfig.set(Constant.SOURCE_FILES, files);
+					readerSplitConfigs.add(splitedConfig);
+				}
+            }
 			LOG.debug("split() ok and end...");
 			return readerSplitConfigs;
 		}
