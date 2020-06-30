@@ -8,10 +8,10 @@
 '''''''''''''''''''''''''''
 # 启动一个Job，返回Job ID
 # JOB_DESC=`cat xxxx.json`
-# curl -d "jobDesc=$JOB_DESC&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
+# curl -d "jobDesc=$JOB_DESC&jvm=\"xxxx\"&params=\"-DHADOOP_USER_NAME=hive -Dyear=2020\"" http://localhost:9999/job
 # 或
-# curl -d "jobDesc=http://<dns>/path/test.json&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
-# curl -d "jobDesc=<local path>/dir/test.json&jvm=\"-Dfile.encoding=UTF-8 -DHADOOP_USER_NAME=hive\"&params=\"-Dyear=2020\"" http://localhost:9999/job
+# curl -d "jobDesc=http://<dns>/path/test.json&params=\"-Dyear=2020\"" http://localhost:9999/job
+# curl -d "jobDesc=<local path>/dir/test.json&params=\"-Dyear=2020\"" http://localhost:9999/job
 # 
 # 查询所有Job ID列表
 # curl http://localhost:9999/jobs
@@ -34,6 +34,7 @@ import json
 import re
 import tempfile
 from datax import *
+
 
 app = Flask(__name__)
 
@@ -65,20 +66,22 @@ def stop_thread(thread):
     _async_raise(thread.ident, SystemExit)
 
 # 新job在运行在一个新的线程中
-def start_job_worker(jobid,jvmArgs, params,jobDesc):
+def start_job_worker(jobid,jvm, params,options,jobDesc):
     # printCopyright()
     inputArgv = []
     filepath = None
 
     if jobid is not None:
         inputArgv.append('--jobid={0}'.format(jobid))
-    if jvmArgs is not None:
-        inputArgv.append('-j\"{0}\"'.format(jvmArgs))
+    if jvm is not None:
+        inputArgv.append('-j{0}'.format(jvm))
     if params is not None:
-        inputArgv.append('-p\"{0}\"'.format(params))
-
+        inputArgv.append('-p{0}'.format(params))
+    if options is not None:
+        inputArgv.append(options)
+    
     #  如果以{开头，表示输入的是描述Job的JSON，否则按json文件路径或URL处理
-    if( re.search('\s*\{.*',jobDesc)):
+    if( re.match('\s*\{.*',jobDesc)):
         fd, filepath = tempfile.mkstemp()
         with open(filepath,'wb') as f:
             # ensure_ascii一定要设为False，否则返回的是ascii格式的，其中仍然包含着unicode编码文本
@@ -98,6 +101,7 @@ def start_job_worker(jobid,jvmArgs, params,jobDesc):
     parser = getOptionParser()
     options, args = parser.parse_args(inputArgv)
     startCommand = buildStartCommand(options, args)
+    print(startCommand)
     # 指定stdout管道，才会接收到控制台输出
     child_process = subprocess.Popen(startCommand, shell=True,stdout= PIPE,stderr= PIPE)
 
@@ -118,8 +122,7 @@ def start_job_worker(jobid,jvmArgs, params,jobDesc):
         jobInfos[jobid] = jobInfo
     except SystemExit as e:
         jobInfo = getjobInfo(jobid)
-        jobInfo["return_code"] = '1'
-        jobInfo["stderr"] = 'Job {} has been killed'.format(jobid)
+        jobInfo["errmsg"] = 'Job {} has been killed'.format(jobid)
         jobInfo.pop("jobThread")
         jobInfos[jobid] = jobInfo
 
@@ -136,17 +139,20 @@ def start_job():
         else:
             # header Content-Type: application/x-www-form-urlencoded
             values = request.form
-        jvmArgs = values.get("jvm")
-        params = values.get("params")
-        jobDesc = values.get("jobDesc")
+
+        jvm = values.get("jvm",None)
+        params = values.get("params",None)
+        options = values.get("options",None)
+        jobDesc = values.get("jobDesc",None)
 
         jobid = str(len(jobInfos)+1)
         t = threading.Thread(   target=start_job_worker,
                                 name='datax_job_{0}'.format(jobid),
                                 kwargs={
                                     'jobid': jobid,
-                                    'jvmArgs': jvmArgs,
+                                    'jvm': jvm,
                                     'params': params,
+                                    'options': options,
                                     'jobDesc': jobDesc
                                 })
         t.start()
@@ -188,7 +194,7 @@ def get_job(jobid='',attr=None):
             reqResult['errmsg'] = 'Job {} is running.'.format(jobid)
         else:
             reqResult["status"] = "success"            
-            reqResult["stderr"] = jobInfo["stderr"]
+            # reqResult["stderr"] = jobInfo["stderr"]
             reqResult["return_code"] = jobInfo["return_code"]
             
             if attr == 'stdout':
@@ -197,7 +203,9 @@ def get_job(jobid='',attr=None):
                     with open(logfile,'rb') as f:
                         reqResult["stdout"] = f.read()
                         f.close()
-        
+                else:
+                    print('Job日志文件[Job-{}.log]没找到'.format(jobid))
+
             if attr is None:
                 return json.dumps(reqResult,ensure_ascii=False,encoding='utf-8')
             elif reqResult.has_key(attr):

@@ -201,26 +201,32 @@ public class HdfsWriter extends Writer {
 
         @Override
         public void post() {
+        	boolean bFound = false;
         	Iterator<String> it = tmpFiles.iterator();
-        	if( it.hasNext() && hdfsHelper.isPathexists(it.next())) {
-        		//检查正式目录是否存在
-        		if(hdfsHelper.isPathDir(path)) {
-        			
-	        		if ("truncate".equals(writeMode)) {
-		                Path[] existFilePaths = hdfsHelper.hdfsDirList(path,fileName);
-		                boolean isExistFile = false;
-		                if(existFilePaths.length > 0){
-		                	LOG.info(String.format("由于您配置了writeMode truncate, 开始清理 [%s] 下面以 [%s] 开头的内容",
-		       	                 path, fileName));
-		       	            hdfsHelper.deleteFiles(existFilePaths);
-		                }
-	                }
-        		}else {
-        			hdfsHelper.createDir(new Path(path));
-        		}
-        		//移动临时目录下的文件到正式目录下
-                hdfsHelper.renameFile(tmpFiles, endFiles);
-        	}
+			while (it.hasNext()) {
+				if (hdfsHelper.isPathexists(it.next())) {
+					// 检查正式目录是否存在
+					if (hdfsHelper.isPathDir(path)) {
+
+						if ("truncate".equals(writeMode)) {
+							Path[] existFilePaths = hdfsHelper.hdfsDirList(path, fileName);
+							if (existFilePaths.length > 0) {
+								LOG.info(String.format("由于您配置了writeMode truncate, 开始清理 [%s] 下面以 [%s] 开头的内容", path,
+										fileName));
+								hdfsHelper.deleteFiles(existFilePaths);
+							}
+						}
+					} else {
+						hdfsHelper.createDir(new Path(path));
+					}
+					bFound = true;
+					break;
+				}
+			}
+			if (bFound) {
+				// 移动临时目录下的文件到正式目录下
+				hdfsHelper.renameFile(tmpFiles, endFiles);
+			}
         }
 
         @Override

@@ -236,7 +236,11 @@ public  class HdfsHelper {
                     }
                     LOG.info(String.format("start rename file [%s] to file [%s].", srcFile,dstFile));
                     boolean renameTag = false;
-                    long fileLen = fileSystem.getFileStatus(srcFilePah).getLen();
+                    long fileLen = 0;
+                    
+                    if(fileSystem.exists(srcFilePah)) {
+                    	fileLen = fileSystem.getFileStatus(srcFilePah).getLen();
+                    }
                     if(fileLen>0){
                         renameTag = fileSystem.rename(srcFilePah,dstFilePah);
                         if(!renameTag){
