@@ -322,13 +322,24 @@ public class UnstructuredStorageReaderUtil {
 			setCsvReaderConfig(csvReader);
 			
 			
+			int nRealCols = -1;
 			//补充2列文件属性：文件路径、文件行号
-			if(fileAttrs && column != null && column.size() > 0) {
-				for(int i = 2; i > 0; i--) {
-					ColumnEntry c = new ColumnEntry();
-					c.setType("string");
-					c.setIndex(column.size());
-					column.add(c);
+			if( column != null && column.size() > 0) {
+				if(fileAttrs) {
+					for(int i = 2; i > 0; i--) {
+						ColumnEntry c = new ColumnEntry();
+						c.setType("string");
+						c.setIndex(column.size());
+						column.add(c);
+					}
+				}
+				nRealCols = column.size();
+			}else {
+				if (usecols != null) {
+					nRealCols = usecols.length;
+					if (fileAttrs) {
+						nRealCols += 2;
+					}
 				}
 			}
 			
@@ -340,7 +351,7 @@ public class UnstructuredStorageReaderUtil {
 				// 如果启用了comment，fileLineNum得到的行号可能不是文件的实际行号
 				fileLineNum++;
 
-				String rawData = csvReader.getRawRecord();			
+				String rawData = csvReader.getRawRecord();	
 				// 如果找到分隔行，如果取分割行之前的数据，则终止循环，否则以该行的字段值为新的表头，且下次不再比较splitLine
 				if( !"".equals(splitLine) && (!bFindFirstLine || isBeforeSplitLine ) && rawData != null && rawData.startsWith(splitLine)){
 					if(!bFindFirstLine){
@@ -391,21 +402,22 @@ public class UnstructuredStorageReaderUtil {
 				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
 				// Note: If it is a compressed file, the file line number of multiple records in the same file will be the same
 				if (fileAttrs) {
-					newRows = new String[ parseRow.length + 2];
-					System.arraycopy(parseRow, 0, newRows, 0, parseRow.length);
+					int nCols = nRealCols != -1 ? nRealCols : parseRow.length + 2;
+					newRows = new String[ nCols];
+					System.arraycopy(parseRow, 0, newRows, 0, nCols - 2);
 					
-					if (recordRow == 1 && !skipHeader) {						
-						newRows[parseRow.length] = Constant.FIELD_NAME_FILEPATH;
-						newRows[parseRow.length + 1 ] = Constant.FIELD_NAME_LINE;
+					if (recordRow == 1 && !skipHeader) {
+						newRows[nCols - 2] = Constant.FIELD_NAME_FILEPATH;
+						newRows[nCols - 1 ] = Constant.FIELD_NAME_LINE;
 						
 					}else {
-						newRows[parseRow.length] = context;  //filepath
-						newRows[parseRow.length + 1 ] = String.valueOf(fileLineNum);
-
+						newRows[nCols - 2] = context;  //filepath
+						newRows[nCols - 1 ] = String.valueOf(fileLineNum );
 					}
 				}else {
-							
-					newRows = parseRow;
+					int nCols = nRealCols != -1 ? nRealCols : parseRow.length;
+					newRows = new String[ nCols ];
+					System.arraycopy(parseRow, 0, newRows, 0, nCols);
 				}
 				
 				UnstructuredStorageReaderUtil.transportOneRecord(recordSender,
@@ -443,6 +455,7 @@ public class UnstructuredStorageReaderUtil {
 		// warn: no default value '\N'
 		String nullFormat = readerSliceConfig.getString(Key.NULL_FORMAT);
 		String numericFormat = readerSliceConfig.getString(Key.NUMERIC_FORMAT);
+		String dateFormat = readerSliceConfig.getString(Key.DATE_FORMAT,"yyyy-MM-dd hh:mm:ss");
 		String delimsReplacement = readerSliceConfig.getString(Key.DELIMS_REPLACEMENT,null);
 		
 		// column null,["*"]及["columnName",...] 三种情况均返回null，配置为JSON格式时返回非null
@@ -466,15 +479,27 @@ public class UnstructuredStorageReaderUtil {
 				}
 			}
 			
+			int nRealCols = -1;
 			//补充2列文件属性：文件路径、文件行号
-			if(fileAttrs && column != null && column.size() > 0) {
-				for(int i = 2; i > 0; i--) {
-					ColumnEntry c = new ColumnEntry();
-					c.setType("string");
-					c.setIndex(column.size());
-					column.add(c);
+			if( column != null && column.size() > 0) {
+				if(fileAttrs) {
+					for(int i = 2; i > 0; i--) {
+						ColumnEntry c = new ColumnEntry();
+						c.setType("string");
+						c.setIndex(column.size());
+						column.add(c);
+					}
+				}
+				nRealCols = column.size();
+			}else {
+				if (usecols != null) {
+					nRealCols = usecols.length;
+					if (fileAttrs) {
+						nRealCols += 2;
+					}
 				}
 			}
+			
 			int headerLine = readerSliceConfig.getInt(Key.HEADERLINE,1);
 			
 			//大文件需要较大内存, 200m文件 大约-Xms4096m -Xmx4096m 
@@ -484,7 +509,7 @@ public class UnstructuredStorageReaderUtil {
 					usecols,
 					readerSliceConfig.getList(Key.SHEET_INDEXS),
 					readerSliceConfig.getString(Key.SHEET_NAMES,null),
-					skipHeader, numericFormat);
+					skipHeader, numericFormat, dateFormat);
 			
 			int rowNum = 0;
 			
@@ -504,20 +529,22 @@ public class UnstructuredStorageReaderUtil {
 				// Supplementary file attributes: file path, file last modification time, and file line number where the record is located.
 				// Note: If it is a compressed file, the file line number of multiple records in the same file will be the same
 				if (fileAttrs) {
-					newRows = new String[ parseRow.length + 2];
-					System.arraycopy(parseRow, 0, newRows, 0, parseRow.length);
+					int nCols = nRealCols != -1 ? nRealCols : parseRow.length + 2;
+					newRows = new String[ nCols];
+					System.arraycopy(parseRow, 0, newRows, 0, nCols - 2);
 					
 					if (rowNum == 1 && !skipHeader) {
-						newRows[parseRow.length] = Constant.FIELD_NAME_FILEPATH;
-						newRows[parseRow.length + 1 ] = Constant.FIELD_NAME_LINE;
+						newRows[nCols - 2] = Constant.FIELD_NAME_FILEPATH;
+						newRows[nCols - 1 ] = Constant.FIELD_NAME_LINE;
 						
 					}else {
-						newRows[parseRow.length] = context;  //filepath
-						newRows[parseRow.length + 1 ] = String.valueOf(headerLine + rowNum - (skipHeader ? 0:1) );
+						newRows[nCols - 2] = context;  //filepath
+						newRows[nCols - 1 ] = String.valueOf(headerLine + rowNum - (skipHeader ? 0:1) );
 					}
 				}else {
-									
-					newRows = parseRow;
+					int nCols = nRealCols != -1 ? nRealCols : parseRow.length;
+					newRows = new String[ nCols ];
+					System.arraycopy(parseRow, 0, newRows, 0, nCols);
 				}
 
 				// every line logic

@@ -22,13 +22,14 @@ public class ExcelParser {
 	 * @param sheetsRegex   匹配要读取的Sheet页名称的正则表达式，如果sheetsIndex不为null时忽略本参数
 	 * @param skipHeader    是否输出表头行
 	 * @param numericFormat 数值类型的替换格式，为null时保留原数字格式
+	 * @param dateFormat 自定义日期格式
 	 * @param sheetsIndex   要读取的Sheet页索引号列表，从1开始
 	 * @return 返回从Excel文件中读出的记录集，读取失败返回null
 	 * 
 	 * @throws Exception
 	 */
 	public static List<String[]> parse(String filePath, int headerLine, String[] usecols, int[] sheetsIndexList,
-			String sheetsRegex, boolean skipHeader, String numericFormat) throws Exception {
+			String sheetsRegex, boolean skipHeader, String numericFormat, String dateFormat) throws Exception {
 		
 		InputStream inputStream = new FileInputStream(filePath);
 		FileFormat format = (filePath.toLowerCase().endsWith(".xls")) ? FileFormat.EXCEL2003 : FileFormat.EXCEL2007;
@@ -39,12 +40,12 @@ public class ExcelParser {
 				list.add(i);
 			}
 		}
-		return parse(inputStream,format,headerLine,usecols,list,sheetsRegex,skipHeader, numericFormat);
+		return parse(inputStream,format,headerLine,usecols,list,sheetsRegex,skipHeader, numericFormat, dateFormat);
 		
 	}
 
 	public static List<String[]> parse(InputStream inputStream, FileFormat format,int headerLine, String[] usecols, List sheetsIndexList,
-			String sheetsRegex, boolean skipHeader, String numericFormat) throws Exception {
+			String sheetsRegex, boolean skipHeader, String numericFormat, String dateFormat) throws Exception {
 		
 		int[] indexs = null;
 		if( sheetsIndexList != null && sheetsIndexList.size() > 0) {
@@ -57,11 +58,11 @@ public class ExcelParser {
 		}
 		if (format == FileFormat.EXCEL2007) {
 			XSSFEventParser parser = new XSSFEventParser();
-			return parser.process(inputStream, headerLine, usecols, indexs, sheetsRegex, skipHeader, numericFormat);
+			return parser.process(inputStream, headerLine, usecols, indexs, sheetsRegex, skipHeader, numericFormat, dateFormat);
 
 		} else if (format == FileFormat.EXCEL2003) {
 			HSSFEventParser parser = new HSSFEventParser();
-			return parser.process(inputStream, headerLine, usecols, indexs, sheetsRegex, skipHeader, numericFormat);
+			return parser.process(inputStream, headerLine, usecols, indexs, sheetsRegex, skipHeader, numericFormat, dateFormat);
 		}
 		else {
 			System.out.println("非Excel文件，无法读取");

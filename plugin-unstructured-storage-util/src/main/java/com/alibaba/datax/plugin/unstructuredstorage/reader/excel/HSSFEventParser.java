@@ -23,7 +23,6 @@ import org.apache.poi.hssf.record.BOFRecord;
 import org.apache.poi.hssf.record.BlankRecord;
 import org.apache.poi.hssf.record.BoolErrRecord;
 import org.apache.poi.hssf.record.BoundSheetRecord;
-import org.apache.poi.hssf.record.EOFRecord;
 import org.apache.poi.hssf.record.ExtendedFormatRecord;
 import org.apache.poi.hssf.record.FormatRecord;
 import org.apache.poi.hssf.record.FormulaRecord;
@@ -45,7 +44,10 @@ import org.slf4j.LoggerFactory;
 /**
  * @desc 代码基于 https://github.com/SwordfallYeung/POIExcel 修改
  * 
- *       增加： 1、错误公式按空值处理 2、可按传入的格式重设数值型单元格样式(如果单元格是文本型，则不起作用) 3、完善日期格式化
+ *       增加： 
+ *       1、错误公式按空值处理 
+ *       2、可按传入的格式重设数值型单元格样式(如果单元格是文本型，则不起作用) 
+ *       3、完善日期格式化
  **/
 public class HSSFEventParser implements HSSFListener {
 
@@ -82,8 +84,6 @@ public class HSSFEventParser implements HSSFListener {
 	 * 是否输出formula，还是它对应的值
 	 */
 	private boolean outputFormulaValues = true;
-
-	private final String NORMAL_DATE_FORMAT = "yyyy-MM-dd hh:mm:ss";
 	private static final Logger LOG = LoggerFactory.getLogger(HSSFEventParser.class);
 	/**
 	 * 用于转换formulas
@@ -121,7 +121,6 @@ public class HSSFEventParser implements HSSFListener {
 	 * 判断整行是否为空行的标记
 	 */
 	private boolean notEmptyLine = false;
-
 	private int[] headerIndexs = null;
 
 	private int[] readSheetsIndex = null;
@@ -129,18 +128,20 @@ public class HSSFEventParser implements HSSFListener {
 	private String[] usecols = null;
 	private boolean includeHeader = false;
 	private String numericFormat = null;
-
+	private String dateFormat = null;
 	private List<Integer> extendedRecordFormatIndexList = new ArrayList<Integer>();
 	private Map<Integer, String> formatRecordIndexMap = new HashMap<>();
 
+	
 	/**
 	 * 遍历excel下所有的sheet
-	 * 
 	 * @param numericFormat TODO
+	 * @param dateFormat TODO
+	 * 
 	 * @throws Exception
 	 */
 	public List<String[]> process(InputStream inputStream, int headerLine, String[] usecols, int[] sheetsIndex,
-			String sheetsRegex, boolean skipHeader, String numericFormat) throws Exception {
+			String sheetsRegex, boolean skipHeader, String numericFormat, String dateFormat) throws Exception {
 
 		readSheetsIndex = sheetsIndex;
 		readSheetsRegex = sheetsRegex;
@@ -149,9 +150,10 @@ public class HSSFEventParser implements HSSFListener {
 		this.usecols = usecols;
 		this.includeHeader = !skipHeader;
 		this.numericFormat = numericFormat;
-
+		this.dateFormat = dateFormat;
 		this.fs = new POIFSFileSystem(inputStream);
 		MissingRecordAwareHSSFListener listener = new MissingRecordAwareHSSFListener(this);
+
 		formatListener = new FormatTrackingHSSFListener(listener);
 		HSSFEventFactory factory = new HSSFEventFactory();
 		HSSFRequest request = new HSSFRequest();
@@ -208,13 +210,17 @@ public class HSSFEventParser implements HSSFListener {
 			break;
 		case RowRecord.sid:
 			RowRecord rowRec = (RowRecord) record;
-			// LOG.debug("Row found. Number of Cells: " + rowRec.getLastCol());
+
 			if (this.currentSheet == -1 && rowRec.getRowNumber() == 0) {
 				// special handling first sheet
 				this.currentSheet = 0;
 			} else if (this.currentSheet >= 0 && rowRec.getRowNumber() == 0) {
 				this.currentSheet++; // start processing next sheet
+				LOG.info("current sheet:" + currentSheet);
 				this.totalColumns = 0;
+			} else if (this.cellList.size() > 0 ) {
+				//如果之前有读取单元格记录，则判断为行尾，触发一个行结束事件。（仓库日报的入库明细Sheet因无结束事件造成丢失最后一行）
+				processRecord(new LastCellOfRowDummyRecord(lastRowNumber, lastColumnNumber));
 			}
 			break;
 		case SSTRecord.sid:
@@ -240,7 +246,12 @@ public class HSSFEventParser implements HSSFListener {
 			BoolErrRecord berec = (BoolErrRecord) record;
 			thisRow = berec.getRow();
 			thisColumn = berec.getColumn();
-			thisStr = berec.getBooleanValue() + "";
+			if(berec.isError()) {
+				thisStr = "";
+			}else {
+				thisStr = berec.getBooleanValue() + "";
+			}
+			cellList.add(thisColumn, thisStr);
 			break;
 		case FormulaRecord.sid:// 单元格为公式类型
 			if (!findReadTag()) {
@@ -257,17 +268,18 @@ public class HSSFEventParser implements HSSFListener {
 				if (CellType.ERROR.getCode() == frec.getCachedResultType()) {
 					// 包含错误的公式，按空值处理
 					thisStr = "";
-				}
-				else if (Double.isNaN(doubleValue) || CellType.STRING.getCode() == frec.getCachedResultType() ) {
+				} else if (Double.isNaN(doubleValue) || CellType.STRING.getCode() == frec.getCachedResultType()) {
 					outputNextStringRecord = true;
 					nextRow = frec.getRow();
 					nextColumn = frec.getColumn();
 					return;
 				} else {
-					if (isDateFormat(formatString)) {
-						formatString = NORMAL_DATE_FORMAT;
+					if (ExcelDateUtil.isDateFormat(formatString)) {
+						if(dateFormat != null) {
+							formatString = dateFormat;
+						}
 					}
-					if (!NORMAL_DATE_FORMAT.equals(formatString) && numericFormat != null) {
+					else if (numericFormat != null) {
 						formatString = numericFormat;
 					}
 					int fmtIndex = BuiltinFormats.getBuiltinFormat(formatString);
@@ -308,7 +320,7 @@ public class HSSFEventParser implements HSSFListener {
 			cellList.add(thisColumn, value);
 			checkRowIsNull(value);
 			break;
-		case LabelSSTRecord.sid: // 单元格为字符串类型
+		case LabelSSTRecord.sid: // 单元格为字符串类型（即使设为日期类型）
 			if (!findReadTag()) {
 				// if not then do nothing
 				break;
@@ -326,7 +338,7 @@ public class HSSFEventParser implements HSSFListener {
 				checkRowIsNull(value);
 			}
 			break;
-		case NumberRecord.sid: // 单元格为数字类型
+		case NumberRecord.sid: // 单元格为数字类型或日期类型
 			if (!findReadTag()) {
 				// if not then do nothing
 				break;
@@ -338,25 +350,31 @@ public class HSSFEventParser implements HSSFListener {
 			Double valueDouble = ((NumberRecord) numrec).getValue();
 			String formatString = formatListener.getFormatString(numrec);
 
-			if (isDateFormat(formatString)) {
-				formatString = NORMAL_DATE_FORMAT;
-			}
-			if (formatString != null && (NORMAL_DATE_FORMAT.equals(formatString) || numericFormat == null)) {
-				int formatIndex = formatListener.getFormatIndex(numrec);
-				value = formatter.formatRawCellContents(valueDouble, formatIndex, formatString).trim();
-				value = value.equals("") ? "" : value;
-			} else if (numericFormat != null) {
-				// 使用替代数字格式
-				int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
-				value = formatter.formatRawCellContents(valueDouble, fmtIndex, numericFormat);
-				if (value.contains("E")) {
-					// 不使用科学计数法
-					BigDecimal bd = new BigDecimal(value);
-					value = bd.toPlainString();
+			do {
+				if (formatString != null && ExcelDateUtil.isDateFormat(formatString)) {
+					if (dateFormat != null) {
+						formatString = dateFormat;
+					}
+					int formatIndex = formatListener.getFormatIndex(numrec);
+					value = formatter.formatRawCellContents(valueDouble, formatIndex, formatString).trim();
+					if (ExcelDateUtil.isValidDateValue(value,formatString)) {
+						break;
+					}
 				}
-			} else {
+				if (numericFormat != null) {
+					// 使用替代数字格式
+					int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
+					value = formatter.formatRawCellContents(valueDouble, fmtIndex, numericFormat);
+					if (value.contains("E")) {
+						// 不使用科学计数法
+						BigDecimal bd = new BigDecimal(value);
+						value = bd.toPlainString();
+					}
+					break;
+				}
 				value = valueDouble.toString();
-			}
+
+			} while (false);
 
 			// 向容器加入列值
 			cellList.add(thisColumn, value);
@@ -373,19 +391,20 @@ public class HSSFEventParser implements HSSFListener {
 			this.formatRecordIndexMap.put(fr.getIndexCode(), fr.getFormatString());
 			break;
 		default:
-			// LOG.debug("Ignored record: "+record.getSid());
+			//LOG.debug("Ignored record: "+record.getSid());
 			break;
 		}
-		
+		  		  
 		// this is an empty row in the Excel
-		if (record instanceof MissingRowDummyRecord) { 
+		if (record instanceof MissingRowDummyRecord) {
 			MissingRowDummyRecord emptyRow = (MissingRowDummyRecord) record;
 			// LOG.debug("Detected Empty row");
 			if ((this.currentSheet == -1) && (emptyRow.getRowNumber() == 0)) {
 				// special handling first sheet
-				this.currentSheet = 1;
+				this.currentSheet = 0;
 			} else if ((this.currentSheet >= 0) && (emptyRow.getRowNumber() == 0)) {
 				this.currentSheet++; // start processing next sheet
+				LOG.info("current sheet:" + currentSheet);
 				this.totalColumns = 0;
 			}
 		}
@@ -409,7 +428,7 @@ public class HSSFEventParser implements HSSFListener {
 			lastColumnNumber = thisColumn;
 
 		// 行结束时的操作
-		if (record instanceof LastCellOfRowDummyRecord) {
+		if (record instanceof LastCellOfRowDummyRecord ) {
 			if (minColums > 0) {
 				// 列值重新置空
 				if (lastColumnNumber == -1) {
@@ -417,9 +436,9 @@ public class HSSFEventParser implements HSSFListener {
 				}
 			}
 			lastColumnNumber = -1;
+			
+			if (notEmptyLine && this.sheetMap.get(currentSheet)) {
 
-			if (notEmptyLine && this.sheetMap.get(currentSheet) ) {
-				
 				// 如果表头行是空行，totalColumns将始终是0，所有的数据会被忽略
 				if (curRow + 1 == headerLine) {
 					totalColumns = cellList.size(); // 获取列数
@@ -434,7 +453,8 @@ public class HSSFEventParser implements HSSFListener {
 					}
 				}
 
-				if ( totalColumns> 0 && ((includeHeader && curRow + 1 >= headerLine) || (!includeHeader && curRow + 1 > headerLine))) {
+				if (totalColumns > 0 && ((includeHeader && curRow + 1 >= headerLine)
+						|| (!includeHeader && curRow + 1 > headerLine))) {
 
 					// 2003版尾部为空单元格的，xls里面是以该行最后一个有值的单元格为结束标记的，尾部空单元格跳过，故需补全
 					if (cellList.size() <= totalColumns) { // 其他行如果尾部单元格总数小于totalColums，则补全单元格
@@ -460,7 +480,7 @@ public class HSSFEventParser implements HSSFListener {
 					dataFrame.add(recordRow);
 					totalRows++;
 				}
-				
+
 			}
 			// 清空容器
 			cellList.clear();
@@ -470,7 +490,7 @@ public class HSSFEventParser implements HSSFListener {
 
 	private boolean findReadTag() {
 		Boolean readTag = this.sheetMap.get(this.currentSheet);
-		if ( null != readTag && readTag)
+		if (null != readTag && readTag)
 			return true;
 		else
 			return false;
@@ -502,19 +522,5 @@ public class HSSFEventParser implements HSSFListener {
 		if (value != null && !"".equals(value)) {
 			notEmptyLine = true;
 		}
-	}
-
-	private boolean isDateFormat(String formatString) {
-		if (formatString != null) {
-			formatString = formatString.replace("\\", "/");
-			formatString = formatString.replace("-", "/");
-			formatString = formatString.replace("//", "/");
-
-			if (formatString.contains("m/d/yy") || formatString.contains("yy/mm/dd") || formatString.contains("yy/m/d")
-					|| formatString.contains("dd/mmm/yy")) {
-				return true;
-			}
-		}
-		return false;
 	}
 }

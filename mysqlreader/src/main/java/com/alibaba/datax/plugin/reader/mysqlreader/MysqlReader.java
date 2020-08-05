@@ -27,12 +27,14 @@ public class MysqlReader extends Reader {
             this.originalConfig = super.getPluginJobConf();
 
             Integer userConfigedFetchSize = this.originalConfig.getInt(Constant.FETCH_SIZE);
-            if (userConfigedFetchSize != null) {
-                LOG.warn("对 mysqlreader 不需要配置 fetchSize, mysqlreader 将会忽略这项配置. 如果您不想再看到此警告,请去除fetchSize 配置.");
+            String dbVersion = this.originalConfig.getString("dbVersion","5.0");
+            if("5.0".compareTo(dbVersion) > 0 ){
+	            if (userConfigedFetchSize != null) {
+	                LOG.warn("MySQL数据库低于5.0版时不需要配置 fetchSize, mysqlreader 将会忽略这项配置. 如果您不想再看到此警告,请去除fetchSize 配置.");
+	            }
+	
+	            this.originalConfig.set(Constant.FETCH_SIZE, Integer.MIN_VALUE);
             }
-
-            this.originalConfig.set(Constant.FETCH_SIZE, Integer.MIN_VALUE);
-
             this.commonRdbmsReaderJob = new CommonRdbmsReader.Job(DATABASE_TYPE);
             this.commonRdbmsReaderJob.init(this.originalConfig);
         }

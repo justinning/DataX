@@ -170,7 +170,7 @@ public class FtpReader extends Reader {
 					throw e;
 			}
 			LOG.info(String.format("您即将读取的文件数为: [%s]", this.sourceFiles.size()));
-			if( this.sourceFiles.size() == 0) {
+			if( this.sourceFiles.size() == 0 && !ignorePathNotExist) {
 				LOG.warn(String.format("%s - %s 目录下没有匹配的文件",Thread.currentThread().getName(),this.path.toString()));
 			}
 		}

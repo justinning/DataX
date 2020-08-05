@@ -47,5 +47,7 @@ public class Key {
 	
 	public static final String NUMERIC_FORMAT = "numericFormat";
 	
+	public static final String DATE_FORMAT = "dateFormat";
+	
 	public static final String DELIMS_REPLACEMENT = "delimsReplacement";
 }

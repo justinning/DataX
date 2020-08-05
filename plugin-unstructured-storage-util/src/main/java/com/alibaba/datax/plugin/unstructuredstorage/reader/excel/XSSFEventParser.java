@@ -27,10 +27,8 @@ import org.xml.sax.helpers.XMLReaderFactory;
 /**
  * @desc 代码基于 https://github.com/SwordfallYeung/POIExcel 修改
  *       采用SAX事件驱动模式解决XLSX文件，可以有效解决用户模式内存溢出的问题，它会自动忽略空行以节省内存
- *       
- *       增加：
- *       1、错误公式按空值处理
- *       2、可按传入的格式重设数值型单元格样式(如果单元格是文本型，则不起作用)
+ * 
+ *       增加： 1、错误公式按空值处理 2、可按传入的格式重设数值型单元格样式(如果单元格是文本型，则不起作用)
  *       3、完善日期格式化，包含文本格式的日期内容及日期格式的字符串
  **/
 public class XSSFEventParser extends DefaultHandler {
@@ -129,31 +127,32 @@ public class XSSFEventParser extends DefaultHandler {
 
 	// 定义该文档一行最大的单元格数，用来补全一行最后可能缺失的单元格
 	private String maxRef = null;
-	
+
 	private int[] readSheetsIndex = null;
 	private String[] usecols = null;
 	private int[] headerIndexs = null;
 	private String readSheetsRegex = null;
 	private boolean includeHeader = false;
 	private String numericFormat = null;
+	private String dateFormat = null;
 	/**
 	 * 单元格
 	 */
 	private StylesTable stylesTable;
-
-	private final String NORMAL_DATE_FORMAT = "yyyy-MM-dd hh:mm:ss";
 	private static final Logger LOG = LoggerFactory.getLogger(XSSFEventParser.class);
-	
+
 	/**
 	 * 遍历工作簿中所有的电子表格 并缓存在mySheetList中
-	 * @param inputStream TODO
-	 * @param usecols TODO
+	 * 
+	 * @param inputStream   TODO
+	 * @param usecols       TODO
 	 * @param numericFormat TODO
+	 * @param dateFormat TODO
 	 * @throws Exception
 	 */
 	public List<String[]> process(InputStream inputStream, int headerLine, String[] usecols, int[] sheetsIndex,
-			String sheetsRegex, boolean skipHeader, String numericFormat) throws Exception {
-	
+			String sheetsRegex, boolean skipHeader, String numericFormat, String dateFormat) throws Exception {
+
 		readSheetsIndex = sheetsIndex;
 		readSheetsRegex = sheetsRegex;
 
@@ -161,7 +160,7 @@ public class XSSFEventParser extends DefaultHandler {
 		this.usecols = usecols;
 		this.includeHeader = !skipHeader;
 		this.numericFormat = numericFormat;
-
+		this.dateFormat = dateFormat;
 		OPCPackage pkg = OPCPackage.open(inputStream);
 		XSSFReader xssfReader = new XSSFReader(pkg);
 		stylesTable = xssfReader.getStylesTable();
@@ -267,7 +266,7 @@ public class XSSFEventParser extends DefaultHandler {
 	@Override
 	public void endElement(String uri, String localName, String name) throws SAXException {
 		// t元素也包含字符串
- 		if (isTElement) {// 这个程序没经过
+		if (isTElement) {// 这个程序没经过
 			// 将单元格内容加入rowlist中，在这之前先去掉字符串前后的空白符
 			String value = lastIndex.trim();
 			cellList.add(curCol, value);
@@ -307,12 +306,12 @@ public class XSSFEventParser extends DefaultHandler {
 			// 如果标签名称为row，这说明已到行尾，调用optRows()方法
 			if ("row".equals(name)) {
 				String r = "-1";
-				
+
 				// ref不为null时为本行最后一个非空单元格的坐标，如果B1
-				if( ref != null) {
+				if (ref != null) {
 					r = ref.replaceAll("[A-Z]+", "");
-				}else {
-					//本行是空行
+				} else {
+					// 本行是空行
 					notEmptyLine = false;
 				}
 				int curRow = Integer.parseInt(r);
@@ -321,10 +320,10 @@ public class XSSFEventParser extends DefaultHandler {
 				if (curRow == headerLine) {
 					totalColumns = cellList.size(); // 获取列数
 					// 获得headers各字段对应的列索引
-					if( usecols != null && usecols.length > 0 && headerIndexs == null) {
-						
+					if (usecols != null && usecols.length > 0 && headerIndexs == null) {
+
 						headerIndexs = new int[usecols.length];
-						for(int i = 0;i < usecols.length; i++) {
+						for (int i = 0; i < usecols.length; i++) {
 							headerIndexs[i] = cellList.indexOf(usecols[i]);
 						}
 					}
@@ -338,21 +337,21 @@ public class XSSFEventParser extends DefaultHandler {
 								cellList.add(i, "");
 							}
 						}
-						
+
 						String[] recordRow = null;
 						if (headerIndexs != null) {
 							recordRow = new String[headerIndexs.length];
-							for(int i=0;i< headerIndexs.length; i++)
+							for (int i = 0; i < headerIndexs.length; i++)
 								try {
 									recordRow[i] = cellList.get(headerIndexs[i]);
-								}catch(IndexOutOfBoundsException e) {									
+								} catch (IndexOutOfBoundsException e) {
 								}
-						}else {
+						} else {
 							recordRow = new String[cellList.size()];
-							for(int i=0;i< cellList.size(); i++)
+							for (int i = 0; i < cellList.size(); i++)
 								recordRow[i] = cellList.get(i);
 						}
-						
+
 						// 引用而不是复制
 						dataFrame.add(recordRow);
 						totalRows++;
@@ -398,17 +397,18 @@ public class XSSFEventParser extends DefaultHandler {
 			int styleIndex = Integer.parseInt(cellStyleStr);
 			XSSFCellStyle style = stylesTable.getStyleAt(styleIndex);
 			formatIndex = style.getDataFormat();
-			
+
 			formatString = style.getDataFormatString();
-	
+
 			if (formatString == null) {
 				nextDataType = CellDataType.NULL;
 				formatString = BuiltinFormats.getBuiltinFormat(formatIndex);
-			} else {				
-				if (isDateFormat(formatString)) {
-					nextDataType = CellDataType.DATE;
-					formatString = NORMAL_DATE_FORMAT ;
+			} else {
+				if (nextDataType == CellDataType.NUMBER && dateFormat!= null && ExcelDateUtil.isDateFormat(formatString)) {
+					//nextDataType = CellDataType.DATE;
+					formatString = dateFormat;
 				}
+				//System.out.println(formatString + ":" + nextDataType);
 			}
 		}
 	}
@@ -424,6 +424,8 @@ public class XSSFEventParser extends DefaultHandler {
 	 */
 	@SuppressWarnings("deprecation")
 	public String getDataValue(String value, String thisStr) {
+		if ( totalRows==2293)
+			System.out.println("");
 		switch (nextDataType) {
 		// 这几个的顺序不能随便交换，交换了很可能会导致数据错误
 		case BOOL: // 布尔值
@@ -431,8 +433,8 @@ public class XSSFEventParser extends DefaultHandler {
 			thisStr = first == '0' ? "FALSE" : "TRUE";
 			break;
 		case ERROR: // 错误
-			//thisStr = "\"ERROR:" + value.toString() + '"';
-			//错误单元格包含类似的信息：ERROR:#DIV/0!，按空值处理
+			// thisStr = "\"ERROR:" + value.toString() + '"';
+			// 错误单元格包含类似的信息：ERROR:#DIV/0!，按空值处理
 			thisStr = "";
 			break;
 		case FORMULA: // 公式
@@ -447,35 +449,47 @@ public class XSSFEventParser extends DefaultHandler {
 			thisStr = queryStringByIndex(value);
 			break;
 		case NUMBER: // 数字
-			
-			if(formatString != null && (NORMAL_DATE_FORMAT.equals(formatString) || numericFormat == null)) {
-				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString).trim();
-			} else if (numericFormat != null) {
-				//使用替代数字格式
-				int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
-				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), fmtIndex, numericFormat);
-				if(thisStr.contains("E")) {
-					//不使用科学计数法
-					BigDecimal bd = new BigDecimal(thisStr);
-					thisStr = bd.toPlainString();
+
+			do {
+				try {
+					double dvalue = Double.parseDouble(value);
+					if (formatString != null) {
+						thisStr = formatter.formatRawCellContents(dvalue, formatIndex, formatString).trim();
+						if (ExcelDateUtil.isValidDateValue(thisStr,formatString)) {
+							break;
+						}
+					}
+					if (numericFormat != null) {
+						// 使用替代数字格式
+						int fmtIndex = BuiltinFormats.getBuiltinFormat(numericFormat);
+						thisStr = formatter.formatRawCellContents(dvalue, fmtIndex, numericFormat);
+						if (thisStr.contains("E")) {
+							// 不使用科学计数法
+							BigDecimal bd = new BigDecimal(thisStr);
+							thisStr = bd.toPlainString();
+						}
+						break;
+					}
+				} catch (NumberFormatException e) {
 				}
-			} else {
+				// 上述解析失败直接原值
 				thisStr = value;
-			}
+			} while (false);
+
 			thisStr = thisStr.replace("_", "").trim();
 			break;
-		case DATE: // 日期
-			
-			try{
-				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString);
+		case DATE: 
+			// 无论内容是什么，只要设为日期格式就会进到这里
+			try {
+				thisStr = formatter.formatRawCellContents(Double.parseDouble(value), formatIndex, formatString).trim();
 				// TODO: 如果内容非日期但设置的是日期格式，需要按字符串处理，无法准确识别，暂用日期比较模糊判断。在Excel2003解析中没这个问题
-				if( thisStr.compareTo("1920-01-01 00:00:00") < 0 ) {				
-					thisStr = queryStringByIndex(value);					
-				}else{
+				if (!ExcelDateUtil.isValidDateValue(thisStr,formatString)) {
+					thisStr = queryStringByIndex(value);
+				} else {
 					// 对日期字符串作特殊处理，去掉T
 					thisStr = thisStr.replace("T", " ");
 				}
-			}catch(NumberFormatException e){
+			} catch (NumberFormatException e) {
 				// 如果value不是有效数字，则按字符串查询
 				thisStr = queryStringByIndex(value);
 			}
@@ -490,7 +504,7 @@ public class XSSFEventParser extends DefaultHandler {
 	private String queryStringByIndex(String sstIndex) {
 
 		String thisStr;
-		
+
 		try {
 			int idx = Integer.parseInt(sstIndex);
 			XSSFRichTextString rtss = new XSSFRichTextString(sst.getEntryAt(idx));// 根据idx索引值获取内容值
@@ -557,19 +571,5 @@ public class XSSFEventParser extends DefaultHandler {
 		}
 
 		return true;
-	}
-	
-	private boolean isDateFormat(String formatString) {
-		if (formatString != null) {
-			formatString = formatString.replace("\\", "/");
-			formatString = formatString.replace("-", "/");
-			formatString = formatString.replace("//", "/");
-			
-			if (formatString.contains("m/d/yy") || formatString.contains("yy/mm/dd")
-					|| formatString.contains("yy/m/d") || formatString.contains("dd/mmm/yy")) {
-				return true;
-			}
-		}
-		return false;
 	}
 }
